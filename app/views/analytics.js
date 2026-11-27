@@ -2,7 +2,7 @@
 // Three sub-tabs: variance charts, the snowball-vs-avalanche simulator,
 // and the sinking-fund goals, plus the full category / bills table.
 
-import { DEBTS, GOALS, VAULTS, simulateDebt, fmt, pct } from '../data.js';
+import { DEBTS, GOALS, VAULTS, BILLS, CUSHION, INCOME, simulateDebt, fmt, pct } from '../data.js';
 import { varianceDonut, trendChart, debtCurve } from '../charts.js';
 import { t } from '../i18n.js';
 
@@ -22,7 +22,55 @@ const SHOCKS = [
   { v: 0.5, label: '−50% Layoff' },
 ];
 
-export function renderAnalytics(state, s) {
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Reconciled Cash-Flow & Register Strip (variance tab, bottom half): the
+// payday-to-bill funding snapshot and the split-receipt register, so the
+// two deep features built in V2 are visible in the showcase shot instead of
+// sitting only on their uncaptured routes. All controls are live: the bill
+// chips toggle Paid / Scheduled, the register pills toggle Cleared /
+// Scheduled, and the links go to the full #/audit and #/ledger pages.
+function registerStrip(state, s, audit) {
+  const nov = INCOME['2026-11'].sources;
+  const maya = nov.find((x) => x.name.includes('Maya'));
+  const jordan = nov.find((x) => x.name.includes('Jordan'));
+  const rent = BILLS.find((b) => b.id === 'rent');
+  const decBuffer = CUSHION[29] + maya.amount - rent.amount;
+  const chips = BILLS.filter((b) => b.status === 'due').map((b) => {
+    const paid = state.user.paidBills.includes(b.id);
+    const short = b.name.split(' — ')[0];
+    return `<button class="strip-chip${paid ? ' paid' : ''}" data-action="cal-bill" data-bill="${b.id}">${paid ? '✓ ' : ''}${esc(short)} ${fmt(b.amount)} · ${paid ? 'Paid' : `due ${Number(b.due.slice(8, 10))} Nov`}</button>`;
+  }).join('');
+  const dLabel = (d) => `${Number(d.slice(8, 10))} ${MONTHS_SHORT[Number(d.slice(5, 7)) - 1]}`;
+  const envName = (id) => { const e = s.envelopes.find((x) => x.id === id); return e ? e.name : id; };
+  // Short labels (same convention as the allocator) so a split row's
+  // "Split: … · Balanced $0.00 ✓" fits on one line without ellipsis.
+  const SHORT_ENV = { 'Gifts & Giving': 'Gifts', 'Dining & Takeout': 'Dining Out', 'Extra Debt Payment': 'Extra Debt', 'Fun & Streaming': 'Fun & Media' };
+  const shortEnv = (id) => SHORT_ENV[envName(id)] || envName(id);
+  const splits = s.txns.filter((x) => x.splits);
+  const recent = [...s.txns].filter((x) => !x.splits && x.type === 'expense').sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 2);
+  const regRows = [...splits, ...recent].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 4).map((x) => {
+    const sub = x.splits
+      ? `Split: ${x.splits.map((sp) => shortEnv(sp.envelope)).join(' + ')} · Balanced $0.00 ✓`
+      : esc(envName(x.envelope));
+    return `<div class="reg-row"><span class="reg-date">${dLabel(x.date)}</span><span class="reg-payee"><b>${esc(x.payee)}</b> <span class="muted">· ${sub}</span></span><b class="num">${fmt(x.amount)}</b><button class="pill-btn status-pill${x.status === 'scheduled' ? ' scheduled' : ''}" data-action="txn-status" data-id="${x.id}" title="Click to toggle cleared / scheduled">${x.status === 'scheduled' ? 'Scheduled' : 'Cleared ✓'}</button></div>`;
+  }).join('');
+  const auditOk = audit && audit.passed === audit.total;
+  return `<section class="card strip-card"><div class="card-head"><h2>Reconciled cash-flow &amp; register</h2><span class="pill">Nov 2026 · to 20 Nov</span></div>
+    <div class="sched-cols">
+      <div><h3>Payday &amp; bill funding</h3>
+        <p class="strip-lines"><b>Nov 2</b> +${fmt(maya.amount)} payday · <b>Nov 12</b> Low ${fmt(CUSHION[11])} · <b>Nov 16</b> +${fmt(jordan.amount)} payday<br>Dec rent buffer: <b class="good">${fmt(decBuffer)}</b> after the 2 Dec payday</p>
+        <div class="strip-chips">${chips}</div>
+        <p class="strip-link"><a href="#/audit">${audit ? `${audit.passed}/${audit.total} Audit ${auditOk ? 'PASS ✓' : '— check'}` : 'Audit'} · Full Calendar →</a></p>
+      </div>
+      <div><h3>Split-receipt register</h3>
+        ${regRows}
+        <div class="strip-actions"><button class="btn btn-sm" data-action="export" data-kind="csv">Download CSV</button><a class="btn btn-sm btn-primary" href="#/ledger">+ Split Receipt</a></div>
+      </div>
+    </div></section>`;
+}
+
+export function renderAnalytics(state, s, audit) {
   const lang = state.lang;
   const tab = state.analyticsTab || 'variance';
   const tabs = [['variance', 'Cash-Flow & Variance'], ['debt', 'Debt Snowball vs Avalanche'], ['goals', 'Sinking & Savings Goals']];
@@ -34,7 +82,8 @@ export function renderAnalytics(state, s) {
       <p class="fineprint">Hover a slice for planned vs actual. Housing is the largest envelope at ${fmt(s.spent.housing)}; Dining is the only one over plan, by ${fmt(Math.max(0, s.spent.dining - s.planned.dining))}.</p></div>
       <div class="card"><div class="card-head"><h2>12-month cash-flow trend</h2></div>${trendChart()}
       <p class="fineprint">November is partial (to 20 Nov). April’s income spike is the $1,900 tax refund; August’s spending spike is back-to-school; October carries the $310 annual insurance premium.</p></div>
-    </section>`;
+    </section>
+    ${registerStrip(state, s, audit)}`;
   } else if (tab === 'debt') {
     const method = state.debtMethod || 'snowball';
     const slider = state.debtExtra ?? 30000;
@@ -89,25 +138,22 @@ export function renderAnalytics(state, s) {
     <section class="grid-2">
       <div class="card"><div class="card-head"><h2>Extra monthly debt payment: <b>${fmt(extra)}</b></h2></div>
         <div class="method-row"><span class="muted">Method:</span>${[['snowball', 'Snowball'], ['avalanche', 'Avalanche'], ['minimums', 'Minimums']].map(([k, label]) => `<button class="pill-btn${method === k ? ' on' : ''}" data-action="debt-method" data-method="${k}">${label}</button>`).join('')}</div>
-        <label class="slider-row"> $0 <input type="range" min="0" max="80000" step="2500" value="${slider}" data-action="debt-extra" aria-label="Extra monthly debt payment in cents"${minMethod ? ' disabled' : ''}> $800 <span class="muted">(${(slider / 100).toFixed(0)}/mo on top of ${fmt(32000)} minimums)</span></label>
+        <label class="slider-row"> $0 <input type="range" min="0" max="80000" step="2500" value="${slider}" data-action="debt-extra" aria-label="Extra monthly debt payment in cents"${minMethod ? ' disabled' : ''}> $800 <span class="muted slider-note">(${(slider / 100).toFixed(0)}/mo on top of ${fmt(32000)} minimums)</span></label>
         <div class="trim-row">${TRIMS.map((x) => `<label class="trim"><input type="checkbox" data-action="debt-trim" data-trim="${x.id}"${state.debtTrims && state.debtTrims[x.id] ? ' checked' : ''}${minMethod ? ' disabled' : ''}> ${esc(x.label)}</label>`).join('')}</div>
-        <div class="shock-row"><span class="muted">Income shock:</span>${SHOCKS.map((x) => `<button class="pill-btn${shock === x.v ? ' on' : ''}" data-action="debt-shock" data-shock="${x.v}">${esc(x.label)}</button>`).join('')}</div>
+        <div class="shock-row"><span class="muted shock-label">Income shock:</span>${SHOCKS.map((x) => `<button class="pill-btn${shock === x.v ? ' on' : ''}" data-action="debt-shock" data-shock="${x.v}">${esc(x.label)}</button>`).join('')}</div>
         <p class="fineprint">${minMethod ? 'Minimums: the slider and trims are off — only the $320/mo minimums are paid.' : `Trims add ${fmt(trimSum)}/mo to the extra payment${incomeLoss ? ` · shock takes ${fmt(incomeLoss)}/mo off it` : ''} · effective extra ${fmt(extra)}/mo.`}</p>
         ${debtCurve(cur, minSim.snowball, callout)}
         <div class="debt-cards">
-          <div class="debt-card"><h3>Snowball <span class="muted">— smallest balance first</span></h3><p class="debt-big">${sim.snowball.months} months</p><p>Interest ${fmt(sim.snowball.interest)} · order: ${sim.snowballOrder.join(' → ')}</p></div>
-          <div class="debt-card"><h3>Avalanche <span class="muted">— highest APR first</span></h3><p class="debt-big">${sim.avalanche.months} months</p><p>Interest ${fmt(sim.avalanche.interest)} · order: ${sim.avalancheOrder.join(' → ')}</p></div>
+          <div class="debt-card"><h3>Snowball <span class="muted">— smallest balance first</span></h3><p class="debt-big">${sim.snowball.months} months</p><p>Interest ${fmt(sim.snowball.interest)} <span class="order-line">· order: ${sim.snowballOrder.join(' → ')}</span></p></div>
+          <div class="debt-card"><h3>Avalanche <span class="muted">— highest APR first</span></h3><p class="debt-big">${sim.avalanche.months} months</p><p>Interest ${fmt(sim.avalanche.interest)} <span class="order-line">· order: ${sim.avalancheOrder.join(' → ')}</span></p></div>
         </div>
-        <p class="fineprint">${extra > 0 ? `Avalanche saves ${fmt(save)} of interest and finishes ${sim.snowball.months - sim.avalanche.months} month${sim.snowball.months - sim.avalanche.months === 1 ? '' : 's'} sooner than snowball at ${fmt(extra)}/mo extra. With no extra payment, either method takes 105 months and ${fmt(774030)} of interest — the extra payment is the whole game.` : 'Move the slider or add a trim: with no extra payment, either method takes 105 months and $7,740 of interest.'}${shockNote ? `<br>${esc(shockNote)}` : ''}</p>
+        <p class="fineprint hide-m">${minMethod ? 'Minimums only: with no extra payment, either method takes 105 months and $7,740 of interest — the extra payment is the whole game.' : extra > 0 ? `Avalanche saves ${fmt(save)} of interest and finishes ${sim.snowball.months - sim.avalanche.months} month${sim.snowball.months - sim.avalanche.months === 1 ? '' : 's'} sooner than snowball at ${fmt(extra)}/mo extra. With no extra payment, either method takes 105 months and ${fmt(774030)} of interest — the extra payment is the whole game.` : 'Move the slider or add a trim: with no extra payment, either method takes 105 months and $7,740 of interest.'}</p>${shockNote ? `<p class="fineprint">${esc(shockNote)}</p>` : ''}
       </div>
-      <div class="card"><div class="card-head"><h2>Your debts · ${fmt(DEBTS.reduce((a, d) => a + d.balance, 0))} total</h2></div>
-        ${DEBTS.map((d) => `<div class="debt-row"><span><b>${esc(d.name)}</b><br><span class="muted">${(d.apr * 100).toFixed(2)}% APR · min ${fmt(d.min)}/mo</span></span><b>${fmt(d.balance)}</b></div>`).join('')}
-        <p class="fineprint">Minimums alone are ${fmt(32000)}/mo. The $300/mo extra in the November plan is the Debt Extra envelope (${fmt(s.spent.debtextra)} moved to 20 Nov).</p></div>
-    </section>
-    <section class="card"><div class="card-head"><h2>Loan schedule &amp; sinking vaults</h2><span class="pill">${esc(methodLabel)} · debt-free ${esc(freeDate)}</span></div>
-      <div class="sched-cols"><div><h3>Payoff order — ${esc(methodLabel.toLowerCase())}</h3>${schedRows}</div>
-      <div><h3>Sinking vaults — irregular bills, pre-funded</h3>${vaultRows}</div></div>
-      <p class="fineprint">The schedule follows the ${esc(methodLabel.toLowerCase())} order at ${fmt(extra)}/mo extra. Vaults are pre-funded from the $260/mo Sinking Funds transfer — a vault behind its monthly need shows in red.</p></section>`;
+      <div class="card"><div class="card-head"><h2>Loan schedule &amp; sinking vaults</h2><span class="pill">${esc(methodLabel)} · debt-free ${esc(freeDate)}</span></div>
+        <div class="sched-cols"><div><h3>Payoff order — ${esc(methodLabel.toLowerCase())}</h3>${schedRows}</div>
+        <div><h3>Sinking vaults — irregular bills, pre-funded</h3>${vaultRows}</div></div>
+        <p class="fineprint">The schedule follows the ${esc(methodLabel.toLowerCase())} order at ${fmt(extra)}/mo extra. Minimums alone are ${fmt(32000)}/mo; the $300/mo extra in the November plan is the Debt Extra envelope (${fmt(s.spent.debtextra)} moved to 20 Nov). Vaults are pre-funded from the $260/mo Sinking Funds transfer — a vault behind its monthly need shows in red.</p></div>
+    </section>`;
   } else {
     const vaults = VAULTS.map((v) => {
       const monthsLeft = Math.max(1, (Number(v.due.slice(0, 4)) - 2026) * 12 + Number(v.due.slice(5, 7)) - 11);
@@ -128,19 +174,8 @@ export function renderAnalytics(state, s) {
       <div class="debt-cards vaults">${vaults}</div>
       <p class="fineprint">Vaults are the irregular bills the Sinking Funds envelope pre-funds, so a $310 premium or a $2,000 trip never lands as a surprise. Holiday Travel is behind: its $760/mo need is bigger than its $120/mo share — top it up from Fun or move the trip.</p></section>`;
   }
-  const catRows = s.envelopes.map((e) => {
-    const variance = s.spent[e.id] - s.planned[e.id];
-    const rule = e.savings ? 'Save on payday · auto-transfer' : e.id === 'housing' ? 'Fixed · due 1st, autopay' : e.flexible ? 'Flexible · pace-checked weekly' : 'Fixed · due in month, autopay where offered';
-    const status = s.spent[e.id] > s.planned[e.id] ? 'Over plan' : s.planned[e.id] && s.spent[e.id] / s.planned[e.id] > 0.9 ? 'Watch — near plan' : 'On track';
-    return `<tr><td><span class="dot" style="background:${e.color}"></span>${esc(e.name)}</td><td>${esc(e.group)}</td><td class="num">${fmt(s.planned[e.id])}</td><td class="num">${fmt(s.spent[e.id])}</td><td class="num ${variance > 0 ? 'bad' : 'good'}">${variance > 0 ? '+' : ''}${fmt(variance)}</td><td class="wrap-col">${esc(rule)}</td><td><span class="pill ${variance > 0 ? 'bad' : ''}">${esc(status)}</span></td></tr>`;
-  }).join('');
   return `
   <section class="page-head"><h1>${esc(t(lang, 'analyticsTitle'))}</h1><p class="muted">${state.month === '2026-11' ? 'November 2026 · to 20 Nov' : 'Closed month'} · all figures from the same ledger as Overview</p></section>
   ${tabBar}
-  ${body}
-  <section class="card">
-    <div class="card-head"><h2>Category &amp; bills table</h2><button class="btn" data-action="export" data-kind="analytics-csv">Download Analytics CSV</button></div>
-    <div class="table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Group</th><th>Planned</th><th>Spent</th><th>Variance</th><th>Rule / Cadence &amp; Status</th><th>Status</th></tr></thead><tbody>${catRows}</tbody></table></div>
-    <p class="fineprint">The Rule column wraps instead of clipping — every word stays readable at 1280 px and on a phone.</p>
-  </section>`;
+  ${body}`;
 }

@@ -79,7 +79,7 @@ export function renderEnvelopes(state, s) {
       <p class="fineprint">A is teal, B is grey. November actuals run to 20 Nov; the 50/30/20 target is the full-month plan on $7,420 of income.</p></div>
     </div>
   </section>
-  <section class="card">
+  <section class="card ranked-card">
     <div class="card-head"><h2>${esc(t(lang, 'ranked'))}</h2>
       <div class="pills">${['All', 'Needs', 'Wants', 'Savings & Debt'].map((g) => `<button class="pill-btn${state.groupFilter === g ? ' on' : ''}" data-action="group" data-group="${g}">${esc(t(lang, g === 'All' ? 'all' : g === 'Needs' ? 'needs' : g === 'Wants' ? 'wants' : 'savings'))}</button>`).join('')}</div>
     </div>

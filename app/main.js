@@ -80,7 +80,7 @@ function render() {
   if (parts[1] === 'analytics') state.analyticsTab = ['variance', 'debt', 'goals'].includes(parts[2]) ? parts[2] : 'variance';
   const body = r === 'home' ? renderHome(state, s, audit)
     : r === 'envelopes' ? renderEnvelopes(state, s)
-    : r === 'analytics' ? renderAnalytics(state, s)
+    : r === 'analytics' ? renderAnalytics(state, s, audit)
     : r === 'ledger' ? renderLedger(state, s)
     : renderAudit(state, s, audit);
   app.innerHTML = renderHeader() + `<main class="route-${r}">${body}</main><footer class="foot"><span>AlderLedger · 100% offline · zero build · all figures computed from one reconciled ledger</span><span>Snapshot Fri 20 Nov 2026 · Audit ${audit.passed}/${audit.total} PASS · <a href="#/audit">Methodology [1]–[6]</a></span></footer>`;
