@@ -340,12 +340,14 @@ export function verifyBudgetConsistency(monthKey, user) {
 // Debt payoff simulation: same debts, same extra payment, two orders.
 // Returns months to debt-free and total interest paid for each method,
 // plus the month-by-month total balance series behind the payoff curve
-// (series[0] is the starting balance, series[months] is $0).
+// (series[0] is the starting balance, series[months] is $0) and the
+// month each debt is paid off (for the loan schedule).
 export function simulateDebt(extraCents) {
   const run = (order) => {
     const debts = order.map((d) => ({ ...d }));
     const total0 = debts.reduce((a, d) => a + d.balance, 0);
     const series = [total0];
+    const payoff = {};
     let months = 0, interest = 0;
     let guard = 0;
     while (debts.some((d) => d.balance > 0) && guard < 600) {
@@ -356,9 +358,10 @@ export function simulateDebt(extraCents) {
       // open debt in this method's order.
       for (const d of debts) { if (d.balance <= 0) continue; const pay = Math.min(d.min, d.balance); d.balance -= pay; pool -= pay; }
       for (const d of debts) { if (pool <= 0) break; if (d.balance <= 0) continue; const pay = Math.min(pool, d.balance); d.balance -= pay; pool -= pay; }
+      for (const d of debts) if (d.balance <= 0 && payoff[d.id] === undefined) payoff[d.id] = months;
       series.push(debts.reduce((a, d) => a + d.balance, 0));
     }
-    return { months, interest, series };
+    return { months, interest, series, payoff };
   };
   const snowball = [...DEBTS].sort((a, b) => a.balance - b.balance);
   const avalanche = [...DEBTS].sort((a, b) => b.apr - a.apr);

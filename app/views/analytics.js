@@ -34,42 +34,80 @@ export function renderAnalytics(state, s) {
       <p class="fineprint">Hover a slice for planned vs actual. Housing is the largest envelope at ${fmt(s.spent.housing)}; Dining is the only one over plan, by ${fmt(Math.max(0, s.spent.dining - s.planned.dining))}.</p></div>
       <div class="card"><div class="card-head"><h2>12-month cash-flow trend</h2></div>${trendChart()}
       <p class="fineprint">November is partial (to 20 Nov). April’s income spike is the $1,900 tax refund; August’s spending spike is back-to-school; October carries the $310 annual insurance premium.</p></div>
-    </section>
-    <p class="fineprint feature-line">3 Sinking Vaults · Split Receipts · Snowball / Avalanche payoff curve — new in V2</p>`;
+    </section>`;
   } else if (tab === 'debt') {
+    const method = state.debtMethod || 'snowball';
     const slider = state.debtExtra ?? 30000;
     const trimsOn = TRIMS.filter((x) => state.debtTrims && state.debtTrims[x.id]);
     const trimSum = trimsOn.reduce((a, x) => a + x.amount, 0);
     const shock = state.debtShock ?? 0;
     const incomeLoss = Math.round(742000 * shock);
-    // An income shock eats the extra payment first: the household keeps
-    // the lights on before it pays extra on the cards.
-    const extra = Math.max(0, slider + trimSum - incomeLoss);
+    // Minimums means exactly that: the slider and trims are off and the
+    // extra is $0, so the KPIs, curve and schedule all fall back to the
+    // 105-month minimums path.
+    const minMethod = method === 'minimums';
+    const extra = minMethod ? 0 : Math.max(0, slider + trimSum - incomeLoss);
     const sim = simulateDebt(extra);
     const minSim = simulateDebt(0);
+    const cur = method === 'avalanche' ? sim.avalanche : sim.snowball;
     const save = sim.snowball.interest - sim.avalanche.interest;
+    const methodLabel = method === 'avalanche' ? 'Avalanche' : minMethod ? 'Minimums only' : 'Snowball';
+    const freeDate = new Date(2026, 10 + cur.months, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    const savedVsMin = minSim.snowball.interest - cur.interest;
+    const freedYr = (32000 + extra) * 12;
+    const runway = (GOALS.find((g) => g.id === 'emergency').balance / s.needs.planned).toFixed(1);
+    const callout = minMethod
+      ? `Minimums only · debt-free in ${cur.months} mo · ${fmt(cur.interest)} interest`
+      : `${methodLabel} · debt-free in ${cur.months} mo · saves ${fmt(savedVsMin)} vs minimums`;
     const needs = 434000;
     const shockIncome = 742000 - incomeLoss;
     const shortfall = Math.max(0, needs - shockIncome);
     const shockNote = shock === 0 ? '' : incomeLoss >= slider + trimSum
       ? `Income −${(shock * 100).toFixed(0)}% is ${fmt(incomeLoss)}/mo less — it absorbs the whole ${fmt(slider + trimSum)} extra, so the payoff falls back to minimums (${minSim.snowball.months} months).${shortfall > 0 ? ` It also cuts ${fmt(shortfall)}/mo into essentials; the emergency fund covers that gap for about ${(1822800 / shortfall).toFixed(0)} months.` : ' Essentials are still covered; wants and savings flex first.'}`
       : `Income −${(shock * 100).toFixed(0)}% is ${fmt(incomeLoss)}/mo less, leaving ${fmt(extra)}/mo of extra payment.`;
-    body = `<section class="grid-2">
+    const order = method === 'avalanche' ? sim.avalancheOrder : sim.snowballOrder;
+    const payoff = method === 'avalanche' ? sim.avalanche.payoff : sim.snowball.payoff;
+    const schedRows = order.map((name) => {
+      const d = DEBTS.find((x) => x.name === name);
+      const m = payoff[d.id];
+      const when = new Date(2026, 10 + m, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return `<div class="debt-row"><span><b>${esc(name)}</b><br><span class="muted">${(d.apr * 100).toFixed(2)}% APR · min ${fmt(d.min)}/mo · ${fmt(d.balance)}</span></span><span class="num"><b>paid off mo ${m}</b><br><span class="muted">${when}</span></span></div>`;
+    }).join('');
+    const vaultRows = VAULTS.map((v) => {
+      const monthsLeft = Math.max(1, (Number(v.due.slice(0, 4)) - 2026) * 12 + Number(v.due.slice(5, 7)) - 11);
+      const need = Math.ceil((v.target - v.current) / monthsLeft);
+      const behind = need - v.monthly;
+      const dueLabel = new Date(v.due + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return `<div class="debt-row"><span><b>${esc(v.name)}</b><br><span class="muted">due ${esc(dueLabel)} · ${fmt(v.current)} of ${fmt(v.target)} · needs ${fmt(need)}/mo</span></span><span class="num"><b class="${behind > 0 ? 'bad' : 'good'}">${behind > 0 ? `Behind ${fmt(behind)}/mo` : 'On track ✓'}</b><br><span class="muted">funding ${fmt(v.monthly)}/mo</span></span></div>`;
+    }).join('');
+    body = `<div class="debt-kpis">
+      <div class="debt-kpi"><span class="muted">Debt-free date</span><b class="kpi-num">${esc(freeDate)}</b><span class="muted">${esc(methodLabel)} · ${cur.months} mo</span></div>
+      <div class="debt-kpi"><span class="muted">Interest saved</span><b class="kpi-num good">${fmt(savedVsMin)}</b><span class="muted">vs minimums ${fmt(minSim.snowball.interest)}</span></div>
+      <div class="debt-kpi"><span class="muted">Freed cash / yr</span><b class="kpi-num">${fmt(freedYr)}</b><span class="muted">after debt-free</span></div>
+      <div class="debt-kpi"><span class="muted">Emergency runway</span><b class="kpi-num">${runway} mos</b><span class="muted">${fmt(GOALS.find((g) => g.id === 'emergency').balance)} fund</span></div>
+    </div>
+    <section class="grid-2">
       <div class="card"><div class="card-head"><h2>Extra monthly debt payment: <b>${fmt(extra)}</b></h2></div>
-        <label class="slider-row"> $0 <input type="range" min="0" max="80000" step="2500" value="${slider}" data-action="debt-extra" aria-label="Extra monthly debt payment in cents"> $800 <span class="muted">(${(slider / 100).toFixed(0)}/mo on top of ${fmt(32000)} minimums)</span></label>
-        <div class="trim-row">${TRIMS.map((x) => `<label class="trim"><input type="checkbox" data-action="debt-trim" data-trim="${x.id}"${state.debtTrims && state.debtTrims[x.id] ? ' checked' : ''}> ${esc(x.label)}</label>`).join('')}</div>
+        <div class="method-row"><span class="muted">Method:</span>${[['snowball', 'Snowball'], ['avalanche', 'Avalanche'], ['minimums', 'Minimums']].map(([k, label]) => `<button class="pill-btn${method === k ? ' on' : ''}" data-action="debt-method" data-method="${k}">${label}</button>`).join('')}</div>
+        <label class="slider-row"> $0 <input type="range" min="0" max="80000" step="2500" value="${slider}" data-action="debt-extra" aria-label="Extra monthly debt payment in cents"${minMethod ? ' disabled' : ''}> $800 <span class="muted">(${(slider / 100).toFixed(0)}/mo on top of ${fmt(32000)} minimums)</span></label>
+        <div class="trim-row">${TRIMS.map((x) => `<label class="trim"><input type="checkbox" data-action="debt-trim" data-trim="${x.id}"${state.debtTrims && state.debtTrims[x.id] ? ' checked' : ''}${minMethod ? ' disabled' : ''}> ${esc(x.label)}</label>`).join('')}</div>
         <div class="shock-row"><span class="muted">Income shock:</span>${SHOCKS.map((x) => `<button class="pill-btn${shock === x.v ? ' on' : ''}" data-action="debt-shock" data-shock="${x.v}">${esc(x.label)}</button>`).join('')}</div>
-        <p class="fineprint">Trims add ${fmt(trimSum)}/mo to the extra payment${incomeLoss ? ` · shock takes ${fmt(incomeLoss)}/mo off it` : ''} · effective extra ${fmt(extra)}/mo.</p>
+        <p class="fineprint">${minMethod ? 'Minimums: the slider and trims are off — only the $320/mo minimums are paid.' : `Trims add ${fmt(trimSum)}/mo to the extra payment${incomeLoss ? ` · shock takes ${fmt(incomeLoss)}/mo off it` : ''} · effective extra ${fmt(extra)}/mo.`}</p>
+        ${debtCurve(cur, minSim.snowball, callout)}
         <div class="debt-cards">
           <div class="debt-card"><h3>Snowball <span class="muted">— smallest balance first</span></h3><p class="debt-big">${sim.snowball.months} months</p><p>Interest ${fmt(sim.snowball.interest)} · order: ${sim.snowballOrder.join(' → ')}</p></div>
           <div class="debt-card"><h3>Avalanche <span class="muted">— highest APR first</span></h3><p class="debt-big">${sim.avalanche.months} months</p><p>Interest ${fmt(sim.avalanche.interest)} · order: ${sim.avalancheOrder.join(' → ')}</p></div>
         </div>
         <p class="fineprint">${extra > 0 ? `Avalanche saves ${fmt(save)} of interest and finishes ${sim.snowball.months - sim.avalanche.months} month${sim.snowball.months - sim.avalanche.months === 1 ? '' : 's'} sooner than snowball at ${fmt(extra)}/mo extra. With no extra payment, either method takes 105 months and ${fmt(774030)} of interest — the extra payment is the whole game.` : 'Move the slider or add a trim: with no extra payment, either method takes 105 months and $7,740 of interest.'}${shockNote ? `<br>${esc(shockNote)}` : ''}</p>
-        ${debtCurve(sim.snowball, minSim.snowball)}</div>
+      </div>
       <div class="card"><div class="card-head"><h2>Your debts · ${fmt(DEBTS.reduce((a, d) => a + d.balance, 0))} total</h2></div>
         ${DEBTS.map((d) => `<div class="debt-row"><span><b>${esc(d.name)}</b><br><span class="muted">${(d.apr * 100).toFixed(2)}% APR · min ${fmt(d.min)}/mo</span></span><b>${fmt(d.balance)}</b></div>`).join('')}
         <p class="fineprint">Minimums alone are ${fmt(32000)}/mo. The $300/mo extra in the November plan is the Debt Extra envelope (${fmt(s.spent.debtextra)} moved to 20 Nov).</p></div>
-    </section>`;
+    </section>
+    <section class="card"><div class="card-head"><h2>Loan schedule &amp; sinking vaults</h2><span class="pill">${esc(methodLabel)} · debt-free ${esc(freeDate)}</span></div>
+      <div class="sched-cols"><div><h3>Payoff order — ${esc(methodLabel.toLowerCase())}</h3>${schedRows}</div>
+      <div><h3>Sinking vaults — irregular bills, pre-funded</h3>${vaultRows}</div></div>
+      <p class="fineprint">The schedule follows the ${esc(methodLabel.toLowerCase())} order at ${fmt(extra)}/mo extra. Vaults are pre-funded from the $260/mo Sinking Funds transfer — a vault behind its monthly need shows in red.</p></section>`;
   } else {
     const vaults = VAULTS.map((v) => {
       const monthsLeft = Math.max(1, (Number(v.due.slice(0, 4)) - 2026) * 12 + Number(v.due.slice(5, 7)) - 11);

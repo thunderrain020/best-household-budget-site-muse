@@ -137,13 +137,13 @@ main { max-width: 1240px; margin: 0 auto; padding: 12px 16px 20px; }
 
 /* ---- Allocator ---- */
 .alloc-5030 { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.86rem; margin-bottom: 8px; }
-.alloc-list { border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
-.alloc-row { display: grid; grid-template-columns: 1fr 88px 70px; gap: 6px; align-items: center; padding: 1px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
+.alloc-list { border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.alloc-row { display: grid; grid-template-columns: 1fr 72px 62px; gap: 6px; align-items: center; padding: 1px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
 .alloc-row label { white-space: nowrap; }
 .alloc-row .pill, .alloc-row .alloc-spent { display: none; }
 .alloc-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .alloc-name::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--teal)); margin-right: 6px; }
-.alloc-row input[type="number"] { width: 56px; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 1px 5px; text-align: right; }
+.alloc-row input[type="number"] { width: 50px; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; padding: 1px 5px; text-align: right; }
 .alloc-spent { color: var(--muted); font-size: 0.82rem; text-align: right; white-space: nowrap; }
 .add-cat { display: grid; grid-template-columns: 1fr 110px 80px auto; gap: 6px; margin-top: 10px; }
 .add-cat input[type="text"], .add-cat input[name="name"] { min-width: 0; border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 5px 8px; }
@@ -247,7 +247,6 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
 .trim input { accent-color: var(--teal); }
 .shock-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; font-size: 0.86rem; }
 .vaults { grid-template-columns: repeat(3, 1fr); }
-.feature-line { text-align: center; }
 .modal-card.split-on .single-env { display: none; }
 .modal-card label.split-toggle { display: flex; gap: 8px; align-items: center; }
 .split-toggle input { width: auto; margin: 0; accent-color: var(--teal); }
@@ -258,6 +257,17 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
 .split-balance { font-size: 0.86rem; font-weight: 700; margin: 8px 0 0; }
 .split-balance.good { color: var(--teal); }
 .split-balance.bad { color: var(--crimson); }
+
+/* ---- V3: debt KPIs, method toggle, curve callout, schedule ---- */
+.debt-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.debt-kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 9px 12px; display: flex; flex-direction: column; gap: 1px; }
+.debt-kpi .muted { font-size: 0.78rem; }
+.kpi-num { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+.method-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 2px 0 10px; font-size: 0.86rem; }
+.curve-callout { text-align: center; margin: 6px 0 0; }
+.pill-teal { background: var(--teal-soft); color: var(--teal); border-color: transparent; }
+.sched-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.sched-cols h3 { margin: 4px 0 2px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 1280px) {
@@ -291,6 +301,10 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
   .cmp-row { grid-template-columns: 84px 1fr 110px 52px; }
   .methods { grid-template-columns: 1fr; }
   .debt-cards { grid-template-columns: 1fr; }
+  .debt-kpis { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sched-cols { grid-template-columns: 1fr; }
+  .route-analytics .page-head .muted { display: none; }
+  .route-analytics .page-head h1 { font-size: 1.2rem; }
   .latest-strip { grid-template-columns: 1fr 1fr; }
   .cal td { height: 44px; }
   .action-strip { flex-direction: column; align-items: flex-start; gap: 8px; }

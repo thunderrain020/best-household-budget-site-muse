@@ -21,9 +21,14 @@ function compareValues(key, sNov, user) {
 export function renderEnvelopes(state, s) {
   const lang = state.lang;
   const unassigned = s.expected - s.plannedSpend - s.plannedSave;
+  // Allocator labels stay short and complete: the two-column grid has
+  // no room for the longest names, and an ellipsis here reads as a
+  // broken label. Full names stay everywhere else (detail, table).
+  const SHORT = { dining: 'Dining Out', fun: 'Fun & Media', debtextra: 'Extra Debt' };
+  const shortName = (e) => SHORT[e.id] || e.name;
   const allocRows = s.envelopes.map((e) => {
     const remaining = s.planned[e.id] - s.spent[e.id];
-    return `<div class="alloc-row"><span class="alloc-name" style="--dot:${e.color}">${esc(e.name)}</span>
+    return `<div class="alloc-row"><span class="alloc-name" style="--dot:${e.color}">${esc(shortName(e))}</span>
       <span class="pill ${GROUP_PILL[e.group]}">${esc(e.group)}</span>
       <label>$ <input type="number" min="0" step="5" value="${(s.planned[e.id] / 100).toFixed(0)}" data-planned-env="${e.id}" aria-label="Planned limit for ${esc(e.name)}"></label>
       <span class="alloc-spent">spent ${fmt(s.spent[e.id])}</span>

@@ -129,8 +129,10 @@ export function varianceDonut(s) {
 // Debt payoff curve: total balance over time under the current plan
 // (snowball with the effective extra payment) vs paying minimums only.
 // Both series come from simulateDebt, so the curve can never disagree
-// with the months / interest figures beside it.
-export function debtCurve(current, minimums) {
+// with the months / interest figures beside it. The callout pill is
+// HTML under the SVG (not drawn inside it) so its text stays full-size
+// on a phone and can never overlap a line.
+export function debtCurve(current, minimums, callout) {
   const W = 560, H = 132, PL = 46, PR = 14, PT = 16, PB = 22;
   const maxV = 1145000;
   const maxM = Math.max(current.months, minimums.months, 1);
@@ -143,12 +145,15 @@ export function debtCurve(current, minimums) {
   const same = current.months === minimums.months;
   const endCur = `<circle cx="${X(current.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#0F766E"/><text x="${Math.min(X(current.months) + 8, W - 70).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" font-size="11" font-weight="700" fill="#0F766E">Debt-free · ${current.months} mo</text>`;
   const endMin = same ? '' : `<circle cx="${X(minimums.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#BE123C"/><text x="${(X(minimums.months) - 8).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="#BE123C">Minimums · ${minimums.months} mo</text>`;
+  const legend = same
+    ? `<div class="strip-legend"><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only — the current plan is minimums</span></div>`
+    : `<div class="strip-legend"><span class="strip-leg"><i style="background:#0F766E"></i>Current plan</span><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only</span></div>`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Debt payoff curve">
     <text x="${PL}" y="${PT - 4}" font-size="10" fill="var(--muted)">Total debt $11,450 → $0</text>
     <line x1="${PL}" y1="${Y(0)}" x2="${W - PR}" y2="${Y(0)}" stroke="var(--border)" stroke-width="1"/>
     ${same ? line(minimums.series, '#BE123C', true) : line(minimums.series, '#BE123C', true) + line(current.series, '#0F766E', false)}
     ${endCur}${endMin}
-  </svg><div class="strip-legend"><span class="strip-leg"><i style="background:#0F766E"></i>Current plan</span><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only</span></div>`;
+  </svg>${callout ? `<p class="curve-callout"><span class="pill pill-teal">${esc(callout)}</span></p>` : ''}${legend}`;
 }
 
 // Twelve-month household cash-flow trend: income bars, spending bars,
