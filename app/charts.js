@@ -28,7 +28,7 @@ export function allocationStrip(s) {
     { label: 'Needs', value: s.needs.spent, color: '#0F766E' },
     { label: 'Wants', value: s.wants.spent, color: '#B45309' },
     { label: 'Savings & Debt', value: s.savings.spent, color: '#4338CA' },
-    { label: 'Cash on hand', value: Math.max(0, s.cashOnHand), color: '#94A3B8' },
+    { label: 'Cash on hand', value: Math.max(0, s.cashOnHand), color: '#A8A29A' },
   ];
   // Pixel viewBox (560 wide) so the marker text renders at a real 10px:
   // a 0–100 viewBox with preserveAspectRatio="none" would stretch the
@@ -37,11 +37,11 @@ export function allocationStrip(s) {
   let x = 0;
   const segs = parts.map((p) => {
     const w = (p.value / total) * W;
-    const seg = `<rect x="${x.toFixed(2)}" y="13" width="${Math.max(w, 3).toFixed(2)}" height="33" rx="4" fill="${p.color}"><title>${esc(p.label)}: ${fmt(p.value)} (${((p.value / total) * 100).toFixed(1)}%)</title></rect>`;
+    const seg = `<rect x="${x.toFixed(2)}" y="19" width="${Math.max(w, 3).toFixed(2)}" height="27" rx="4" fill="${p.color}"><title>${esc(p.label)}: ${fmt(p.value)} (${((p.value / total) * 100).toFixed(1)}%)</title></rect>`;
     x += w;
     return seg;
   }).join('');
-  const marks = [50, 80].map((p) => { const mx = (p / 100) * W; return `<line x1="${mx}" y1="13" x2="${mx}" y2="47" stroke="#0F172A" stroke-width="1.5" stroke-dasharray="3 3"/><text x="${mx}" y="9" text-anchor="middle" font-size="10" fill="var(--muted)">${p === 50 ? '50% needs' : '80% · 20% save'}</text>`; }).join('');
+  const marks = [50, 80].map((p) => { const mx = (p / 100) * W; return `<line x1="${mx}" y1="19" x2="${mx}" y2="47" stroke="#0F172A" stroke-width="2" stroke-dasharray="3 3"/><text x="${mx}" y="9" text-anchor="middle" font-size="10" fill="var(--muted)">${p === 50 ? '50% needs' : '80% · 20% save'}</text>`; }).join('');
   const legend = parts.map((p) => `<span class="strip-leg"><i style="background:${p.color}"></i>${esc(p.label)} <b>${fmt(p.value)}</b></span>`).join('');
   return `<svg viewBox="0 0 ${W} 52" width="100%" height="52" role="img" aria-label="Income allocation">${marks}${segs}</svg><div class="strip-legend">${legend}</div>`;
 }
@@ -77,7 +77,7 @@ export function cushionChart() {
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="30-day checking cushion">
     <line x1="${PL}" y1="${floorY}" x2="${W - PR}" y2="${floorY}" stroke="#BE123C" stroke-width="1.5" stroke-dasharray="5 4"/>
     <text x="${PL + 4}" y="${floorY - 5}" text-anchor="start" font-size="10" fill="#BE123C">$1,000 floor</text>
-    <line x1="${X(20)}" y1="${PT}" x2="${X(20)}" y2="${H - PB}" stroke="#94A3B8" stroke-width="1" stroke-dasharray="2 3"/>
+    <line x1="${X(20)}" y1="${PT}" x2="${X(20)}" y2="${H - PB}" stroke="#A8A29A" stroke-width="1" stroke-dasharray="2 3"/>
     <text x="${X(20)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">today · 20 Nov</text>
     <polygon points="${area}" fill="#0F766E" opacity="0.10"/>
     <polyline points="${pts}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linejoin="round"/>
@@ -112,7 +112,7 @@ export function varianceDonut(s) {
   const rest = ENVELOPES.filter((e) => !e.savings && !top.includes(e));
   const other = rest.reduce((a, e) => a + s.spent[e.id], 0);
   const otherPlanned = rest.reduce((a, e) => a + s.planned[e.id], 0);
-  const slices = [...top.map((e) => ({ label: e.name, value: s.spent[e.id], planned: s.planned[e.id], color: e.color })), { label: 'Other needs & wants', value: other, planned: otherPlanned, color: '#94A3B8' }];
+  const slices = [...top.map((e) => ({ label: e.name, value: s.spent[e.id], planned: s.planned[e.id], color: e.color })), { label: 'Other needs & wants', value: other, planned: otherPlanned, color: '#A8A29A' }];
   const total = slices.reduce((a, x) => a + x.value, 0) || 1;
   const R = 74, C = 2 * Math.PI * R;
   let off = 0;
@@ -133,7 +133,7 @@ export function varianceDonut(s) {
 // HTML under the SVG (not drawn inside it) so its text stays full-size
 // on a phone and can never overlap a line.
 export function debtCurve(current, minimums, callout) {
-  const W = 560, H = 132, PL = 46, PR = 14, PT = 16, PB = 22;
+  const W = 560, H = 132, PL = 46, PR = 14, PT = 22, PB = 22;
   const maxV = 1145000;
   const maxM = Math.max(current.months, minimums.months, 1);
   const X = (m) => PL + (m / maxM) * (W - PL - PR);
@@ -144,12 +144,25 @@ export function debtCurve(current, minimums, callout) {
   };
   const same = current.months === minimums.months;
   const endCur = `<circle cx="${X(current.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#0F766E"/><text x="${Math.min(X(current.months) + 8, W - 70).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" font-size="11" font-weight="700" fill="#0F766E">Debt-free · ${current.months} mo</text>`;
-  const endMin = same ? '' : `<circle cx="${X(minimums.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#BE123C"/><text x="${(X(minimums.months) - 8).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="#BE123C">Minimums · ${minimums.months} mo</text>`;
+  // The minimums label sits in a pill, never on the line: its bottom is
+  // placed 14px above the red curve at the pill's left edge (the curve's
+  // highest point under the label, since the balance only falls), the
+  // pill is filled with the card background and given a hairline border,
+  // so no dashed segment can ever touch the text.
+  const minLabel = `Minimums · ${minimums.months} mo`;
+  const minPillW = minLabel.length * 7 + 16;
+  const minPillRight = X(minimums.months) - 8;
+  const minPillLeft = minPillRight - minPillW;
+  const mLeft = Math.max(0, ((minPillLeft - PL) / (W - PL - PR)) * maxM);
+  const iLeft = Math.min(minimums.series.length - 1, Math.floor(mLeft));
+  const balLeft = minimums.series[iLeft] + (minimums.series[Math.min(iLeft + 1, minimums.series.length - 1)] - minimums.series[iLeft]) * (mLeft - iLeft);
+  const minPillBottom = Y(balLeft) - 14;
+  const endMin = same ? '' : `<circle cx="${X(minimums.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#BE123C"/><g><rect x="${minPillLeft.toFixed(1)}" y="${(minPillBottom - 20).toFixed(1)}" width="${minPillW}" height="20" rx="6" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text x="${(minPillLeft + minPillW / 2).toFixed(1)}" y="${(minPillBottom - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="#BE123C">${minLabel}</text></g>`;
   const legend = same
     ? `<div class="strip-legend"><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only — the current plan is minimums</span></div>`
     : `<div class="strip-legend"><span class="strip-leg"><i style="background:#0F766E"></i>Current plan</span><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only</span></div>`;
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Debt payoff curve">
-    <text x="${PL}" y="${PT - 4}" font-size="10" fill="var(--muted)">Total debt $11,450 → $0</text>
+    <text x="${PL}" y="${PT - 8}" font-size="10" fill="var(--muted)">Total debt $11,450 → $0</text>
     <line x1="${PL}" y1="${Y(0)}" x2="${W - PR}" y2="${Y(0)}" stroke="var(--border)" stroke-width="1"/>
     ${same ? line(minimums.series, '#BE123C', true) : line(minimums.series, '#BE123C', true) + line(current.series, '#0F766E', false)}
     ${endCur}${endMin}

@@ -1,18 +1,20 @@
 /* AlderLedger — editorial warm-light design system.
-   One palette, two themes, zero external assets. All type uses the
-   system stack with tabular numbers, so money columns always align. */
+   Warm linen canvas, ivory cards, stone hairlines; Fraunces serif for
+   the wordmark and headings, system sans with tabular numbers for figures.
+   One palette, two themes, zero external assets except the Fraunces
+   stylesheet (Georgia fallback when it cannot load). */
 
 :root {
-  --bg: #F7F9FC; --card: #FFFFFF; --border: #E2E8F0;
-  --ink: #0F172A; --muted: #475569; --faint: #94A3B8;
+  --bg: #F9F7F2; --card: #FFFFFF; --border: #E6E0D4;
+  --ink: #1B1917; --muted: #6B655B; --faint: #A8A29A;
   --teal: #0F766E; --crimson: #BE123C; --amber: #B45309; --indigo: #4338CA;
   --teal-soft: #E6F4F2; --red-soft: #FDECEF; --amber-soft: #FDF3E3; --indigo-soft: #ECECFB;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.07);
+  --shadow: 0 1px 3px rgba(93, 78, 55, 0.08);
   color-scheme: light;
 }
 [data-theme="dark"] {
-  --bg: #0B1220; --card: #111C2E; --border: #24344D;
-  --ink: #E8EEF7; --muted: #9DB0C6; --faint: #5B6B82;
+  --bg: #111715; --card: #18201D; --border: #2A332F;
+  --ink: #EDEBE6; --muted: #A8B0A4; --faint: #6B7268;
   --teal-soft: #0E2E2B; --red-soft: #3A1420; --amber-soft: #33240F; --indigo-soft: #1D1B4A;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
@@ -22,8 +24,8 @@ html { font-size: 15px; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-variant-numeric: tabular-nums; line-height: 1.45; }
 a { color: var(--teal); text-decoration: none; }
 a:hover { text-decoration: underline; }
-h1 { font-size: 1.35rem; margin: 0; letter-spacing: -0.01em; }
-h2 { font-size: 1rem; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 1.35rem; margin: 0; letter-spacing: -0.01em; font-family: 'Fraunces', 'Newsreader', Georgia, serif; font-weight: 700; }
+h2 { font-size: 1rem; margin: 0; letter-spacing: -0.01em; font-family: 'Fraunces', 'Newsreader', Georgia, serif; font-weight: 600; }
 h3 { font-size: 0.92rem; margin: 10px 0 4px; }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -39,7 +41,7 @@ code { font-size: 0.85em; background: var(--bg); padding: 0 4px; border-radius: 
 .brand { display: flex; align-items: baseline; gap: 8px; color: var(--ink); flex: 0 0 auto; }
 .brand:hover { text-decoration: none; }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: var(--teal); color: #fff; font-weight: 800; font-size: 1.05rem; align-self: center; }
-.brand-name { font-weight: 800; font-size: 1.15rem; letter-spacing: -0.02em; }
+.brand-name { font-family: 'Fraunces', 'Newsreader', Georgia, serif; font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; }
 .brand-sub { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 .month-select { border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 6px 8px; font-weight: 600; }
 .tabs { display: flex; gap: 2px; margin-left: 6px; }
@@ -192,8 +194,17 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .rec { color: var(--teal); font-weight: 700; }
 
 /* ---- Analytics ---- */
-.subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.subtabs .pill-btn { padding: 7px 14px; font-size: 0.88rem; }
+/* Analytics sub-nav: an editorial underline tab bar on desktop (the
+   pill look is kept for phones, where it wraps cleanly). */
+.subtabs { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.subtabs .pill-btn { background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 8px 8px 0 0; padding: 8px 14px; font-size: 0.88rem; margin-bottom: -1px; }
+.subtabs .pill-btn:hover { color: var(--ink); background: var(--bg); }
+.subtabs .pill-btn.on { background: var(--teal-soft); color: var(--teal); border-bottom-color: var(--teal); }
+@media (max-width: 640px) {
+  .subtabs { gap: 6px; border-bottom: 0; }
+  .subtabs .pill-btn { border: 1px solid var(--border); background: var(--card); border-radius: 999px; padding: 7px 14px; margin-bottom: 0; }
+  .subtabs .pill-btn.on { background: var(--teal); border-color: var(--teal); color: #fff; }
+}
 .donut-wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .donut-legend { flex: 1 1 200px; }
 .donut-row { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 0.86rem; }
@@ -338,8 +349,13 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
   .debt-cards:not(.vaults) { grid-template-columns: 1fr 1fr; gap: 8px; }
   .debt-card h3 .muted { display: none; }
   .debt-big { font-size: 1.3rem; }
-  .debt-kpis { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
-  .debt-kpi { padding: 6px 10px; }
+  .debt-kpis { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  .debt-kpi { padding: 5px 10px; }
+  /* V5: the KPI sub-lines (Snowball · 25 mo, vs minimums $7,740, …)
+     are redundant on a phone — the method toggle and the callout say
+     the same — so they drop out, freeing ~36px for the schedule card
+     below. */
+  .debt-kpi .muted:last-child { display: none; }
   .trim { font-size: 0.8rem; }
   .trim-row { gap: 8px; }
   .shock-label, .slider-note, .hide-m, .order-line { display: none; }
@@ -347,11 +363,22 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
      card's heading is inside the 844px frame, not just its top edge. */
   .route-analytics .page-head { margin-bottom: 6px; }
   .subtabs { margin-bottom: 8px; }
-  .method-row { margin-bottom: 8px; }
-  .debt-card { padding: 6px 10px; }
+  .method-row { margin-bottom: 6px; }
+  .debt-card { padding: 5px 10px; }
   .debt-card h3 { margin-bottom: 2px; }
-  .curve-callout { margin-top: 4px; }
+  .curve-callout { margin-top: 2px; }
   .sched-cols { grid-template-columns: 1fr; }
+  .sched-cols h3 { margin: 2px 0 2px; }
+  /* V5: four more mobile debt cuts so the schedule card's first row
+     (Store Card · paid off mo 4) is inside the 844px frame. The schedule
+     pill repeats the KPI + h3, the curve legend repeats the end labels,
+     the trim note repeats the slider, and the method interest line is
+     carried by the Interest-saved KPI + callout — all four stay on
+     desktop, where the frame is tall enough. */
+  .sched-card .card-head .pill { display: none; }
+  .debt-controls .strip-legend { display: none; }
+  .trim-note { display: none; }
+  .debt-cards:not(.vaults) .debt-card p:not(.debt-big) { display: none; }
   .route-analytics .page-head .muted { display: none; }
   .route-analytics .page-head h1 { font-size: 1.2rem; }
   .latest-strip { grid-template-columns: 1fr 1fr; }

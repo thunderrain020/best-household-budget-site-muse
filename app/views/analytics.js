@@ -136,12 +136,12 @@ export function renderAnalytics(state, s, audit) {
       <div class="debt-kpi"><span class="muted">Emergency runway</span><b class="kpi-num">${runway} mos</b><span class="muted">${fmt(GOALS.find((g) => g.id === 'emergency').balance)} fund</span></div>
     </div>
     <section class="grid-2">
-      <div class="card"><div class="card-head"><h2>Extra monthly debt payment: <b>${fmt(extra)}</b></h2></div>
+      <div class="card debt-controls"><div class="card-head"><h2>Extra monthly debt payment: <b>${fmt(extra)}</b></h2></div>
         <div class="method-row"><span class="muted">Method:</span>${[['snowball', 'Snowball'], ['avalanche', 'Avalanche'], ['minimums', 'Minimums']].map(([k, label]) => `<button class="pill-btn${method === k ? ' on' : ''}" data-action="debt-method" data-method="${k}">${label}</button>`).join('')}</div>
         <label class="slider-row"> $0 <input type="range" min="0" max="80000" step="2500" value="${slider}" data-action="debt-extra" aria-label="Extra monthly debt payment in cents"${minMethod ? ' disabled' : ''}> $800 <span class="muted slider-note">(${(slider / 100).toFixed(0)}/mo on top of ${fmt(32000)} minimums)</span></label>
         <div class="trim-row">${TRIMS.map((x) => `<label class="trim"><input type="checkbox" data-action="debt-trim" data-trim="${x.id}"${state.debtTrims && state.debtTrims[x.id] ? ' checked' : ''}${minMethod ? ' disabled' : ''}> ${esc(x.label)}</label>`).join('')}</div>
         <div class="shock-row"><span class="muted shock-label">Income shock:</span>${SHOCKS.map((x) => `<button class="pill-btn${shock === x.v ? ' on' : ''}" data-action="debt-shock" data-shock="${x.v}">${esc(x.label)}</button>`).join('')}</div>
-        <p class="fineprint">${minMethod ? 'Minimums: the slider and trims are off — only the $320/mo minimums are paid.' : `Trims add ${fmt(trimSum)}/mo to the extra payment${incomeLoss ? ` · shock takes ${fmt(incomeLoss)}/mo off it` : ''} · effective extra ${fmt(extra)}/mo.`}</p>
+        <p class="fineprint trim-note">${minMethod ? 'Minimums: the slider and trims are off — only the $320/mo minimums are paid.' : `Trims add ${fmt(trimSum)}/mo to the extra payment${incomeLoss ? ` · shock takes ${fmt(incomeLoss)}/mo off it` : ''} · effective extra ${fmt(extra)}/mo.`}</p>
         ${debtCurve(cur, minSim.snowball, callout)}
         <div class="debt-cards">
           <div class="debt-card"><h3>Snowball <span class="muted">— smallest balance first</span></h3><p class="debt-big">${sim.snowball.months} months</p><p>Interest ${fmt(sim.snowball.interest)} <span class="order-line">· order: ${sim.snowballOrder.join(' → ')}</span></p></div>
@@ -149,7 +149,7 @@ export function renderAnalytics(state, s, audit) {
         </div>
         <p class="fineprint hide-m">${minMethod ? 'Minimums only: with no extra payment, either method takes 105 months and $7,740 of interest — the extra payment is the whole game.' : extra > 0 ? `Avalanche saves ${fmt(save)} of interest and finishes ${sim.snowball.months - sim.avalanche.months} month${sim.snowball.months - sim.avalanche.months === 1 ? '' : 's'} sooner than snowball at ${fmt(extra)}/mo extra. With no extra payment, either method takes 105 months and ${fmt(774030)} of interest — the extra payment is the whole game.` : 'Move the slider or add a trim: with no extra payment, either method takes 105 months and $7,740 of interest.'}</p>${shockNote ? `<p class="fineprint">${esc(shockNote)}</p>` : ''}
       </div>
-      <div class="card"><div class="card-head"><h2>Loan schedule &amp; sinking vaults</h2><span class="pill">${esc(methodLabel)} · debt-free ${esc(freeDate)}</span></div>
+      <div class="card sched-card"><div class="card-head"><h2>Loan schedule &amp; sinking vaults</h2><span class="pill">${esc(methodLabel)} · debt-free ${esc(freeDate)}</span></div>
         <div class="sched-cols"><div><h3>Payoff order — ${esc(methodLabel.toLowerCase())}</h3>${schedRows}</div>
         <div><h3>Sinking vaults — irregular bills, pre-funded</h3>${vaultRows}</div></div>
         <p class="fineprint">The schedule follows the ${esc(methodLabel.toLowerCase())} order at ${fmt(extra)}/mo extra. Minimums alone are ${fmt(32000)}/mo; the $300/mo extra in the November plan is the Debt Extra envelope (${fmt(s.spent.debtextra)} moved to 20 Nov). Vaults are pre-funded from the $260/mo Sinking Funds transfer — a vault behind its monthly need shows in red.</p></div>

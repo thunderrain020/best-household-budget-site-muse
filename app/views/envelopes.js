@@ -49,7 +49,7 @@ export function renderEnvelopes(state, s) {
     const max = Math.max(a, b, 1);
     const diff = a - b;
     return `<div class="cmp-row"><span class="cmp-name">${esc(name)}</span>
-      <span class="cmp-bars"><i style="width:${(a / max * 100).toFixed(1)}%;background:#0F766E"></i><i style="width:${(b / max * 100).toFixed(1)}%;background:#94A3B8"></i></span>
+      <span class="cmp-bars"><i style="width:${(a / max * 100).toFixed(1)}%;background:#0F766E"></i><i style="width:${(b / max * 100).toFixed(1)}%;background:#A8A29A"></i></span>
       <span class="cmp-nums"><b>${fmt(a)}</b> vs ${fmt(b)}</span>
       <span class="${diff > 0 ? 'bad' : diff < 0 ? 'good' : 'muted'}">${diff === 0 ? '±$0' : (diff > 0 ? '+' : '−') + fmt(Math.abs(diff)).slice(1)}</span></div>`;
   }).join('');
@@ -75,7 +75,7 @@ export function renderEnvelopes(state, s) {
 
     </div>
     <div>
-      <div class="card"><div class="card-head"><h2>${esc(t(lang, 'compare'))}</h2></div>${cmpSelects}<div class="cmp-legend"><span><i style="background:#0F766E"></i>A · ${esc(A.label)}</span><span><i style="background:#94A3B8"></i>B · ${esc(B.label)}</span></div>${cmpRows}
+      <div class="card"><div class="card-head"><h2>${esc(t(lang, 'compare'))}</h2></div>${cmpSelects}<div class="cmp-legend"><span><i style="background:#0F766E"></i>A · ${esc(A.label)}</span><span><i style="background:#A8A29A"></i>B · ${esc(B.label)}</span></div>${cmpRows}
       <p class="fineprint">A is teal, B is grey. November actuals run to 20 Nov; the 50/30/20 target is the full-month plan on $7,420 of income.</p></div>
     </div>
   </section>
