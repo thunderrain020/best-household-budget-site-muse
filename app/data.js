@@ -136,6 +136,47 @@ export function buildMonthTxns(monthKey) {
     }
   }
   txns.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
+  // V2 — split receipts (November only): merge two same-day expense
+  // transactions from different envelopes into one receipt. Each part
+  // keeps its original envelope and amount, so every envelope total is
+  // unchanged and the audit still re-adds exactly. The second receipt is
+  // still processing at the bank, so it starts as Scheduled.
+  if (monthKey === '2026-11') {
+    const usedDates = new Set();
+    const mergeSplit = (wantA, wantB, payee, status) => {
+      for (let i = 0; i < txns.length; i++) {
+        const a = txns[i];
+        if (a.type !== 'expense' || a.splits || a.envelope !== wantA || usedDates.has(a.date)) continue;
+        const j = txns.findIndex((b, k) => k !== i && b.type === 'expense' && !b.splits && b.envelope === wantB && b.date === a.date);
+        if (j < 0) continue;
+        const b = txns[j];
+        const merged = { id: a.id, date: a.date, payee, envelope: null, type: 'expense', amount: a.amount + b.amount, splits: [{ envelope: a.envelope, amount: a.amount }, { envelope: b.envelope, amount: b.amount }], reconciled: true, status };
+        txns.splice(Math.max(i, j), 1);
+        txns.splice(Math.min(i, j), 1, merged);
+        usedDates.add(a.date);
+        return true;
+      }
+      return false;
+    };
+    const mergeAny = (payee, status) => {
+      const retail = ['groceries', 'home', 'clothing', 'gifts', 'dining', 'fun'];
+      for (let i = 0; i < txns.length; i++) {
+        const a = txns[i];
+        if (a.type !== 'expense' || a.splits || !retail.includes(a.envelope) || usedDates.has(a.date)) continue;
+        const j = txns.findIndex((b, k) => k !== i && b.type === 'expense' && !b.splits && retail.includes(b.envelope) && b.envelope !== a.envelope && b.date === a.date);
+        if (j < 0) continue;
+        const b = txns[j];
+        const merged = { id: a.id, date: a.date, payee, envelope: null, type: 'expense', amount: a.amount + b.amount, splits: [{ envelope: a.envelope, amount: a.amount }, { envelope: b.envelope, amount: b.amount }], reconciled: true, status };
+        txns.splice(Math.max(i, j), 1);
+        txns.splice(Math.min(i, j), 1, merged);
+        usedDates.add(a.date);
+        return true;
+      }
+      return false;
+    };
+    if (!mergeSplit('groceries', 'home', 'Costco Wholesale', 'cleared')) mergeAny('Corner Market', 'cleared');
+    if (!mergeSplit('groceries', 'clothing', 'Target', 'scheduled')) mergeAny('Corner Market', 'scheduled');
+  }
   return txns;
 }
 
@@ -165,6 +206,16 @@ export const GOALS = [
   { id: 'holiday', name: 'Holiday — December trip', balance: 124000, target: 200000, note: 'Flights + stay, booked by 5 Dec' },
   { id: 'car', name: 'Next car', balance: 86000, target: 300000, note: '$180/mo from sinking funds' },
   { id: 'repairs', name: 'Home repairs', balance: 54000, target: 150000, note: 'Roof inspection in spring' },
+];
+
+// Non-monthly sinking vaults (cents): the irregular bills the Sinking
+// Funds envelope pre-funds. `monthly` is each vault's share of the $260/mo
+// sinking transfer; `due` is the date the money must be there. The monthly
+// need is (target − current) ÷ months left from Nov 2026, rounded up.
+export const VAULTS = [
+  { id: 'insurance', name: 'Annual Insurance', target: 31000, current: 28500, due: '2027-10-01', monthly: 2500, note: 'Beacon home premium, auto-renews 1 Oct 2027' },
+  { id: 'holiday', name: 'Holiday Travel', target: 200000, current: 124000, due: '2026-12-20', monthly: 12000, note: 'Flights + stay for the December trip' },
+  { id: 'car', name: 'Car Maintenance', target: 150000, current: 54000, due: '2027-06-01', monthly: 11500, note: 'Tyres, service + the timing belt, due before summer' },
 ];
 
 // Twelve months of history (cents). `saved` is money actually moved to
@@ -218,6 +269,9 @@ export function buildSummary(monthKey, user) {
   const u = user || { txns: [], planned: {}, paidBills: [], moved48: false };
   const baseTxns = buildMonthTxns(monthKey);
   const txns = [...baseTxns, ...(u.txns || []).filter((t) => t.date.startsWith(monthKey))];
+  // Effective cleared / scheduled status: the household's own override
+  // wins, then the transaction's own status, then cleared.
+  for (const t of txns) t.status = (u.txnStatus && u.txnStatus[t.id]) || t.status || 'cleared';
   // Household-added envelopes (from the allocator's Add Category form)
   // join the base sixteen; they carry their own plan and start at $0 spent.
   const envelopes = [...ENVELOPES, ...(u.customEnvs || []).map((c) => ({ ...c, color: '#64748B', flexible: c.group !== 'Savings & Debt', savings: c.group === 'Savings & Debt' }))];
@@ -230,11 +284,13 @@ export function buildSummary(monthKey, user) {
   }
   const spent = {};
   for (const env of envelopes) spent[env.id] = 0;
-  let incomeReceived = 0, expenseTotal = 0, transferTotal = 0;
+  let incomeReceived = 0, expenseTotal = 0, transferTotal = 0, clearedTotal = 0, scheduledTotal = 0, splitCount = 0;
   for (const t of txns) {
+    if (t.splits) splitCount += 1;
     if (t.type === 'income') incomeReceived += t.amount;
-    if (t.type === 'expense') { expenseTotal += t.amount; if (t.envelope) spent[t.envelope] = (spent[t.envelope] || 0) + t.amount; }
+    if (t.type === 'expense') { expenseTotal += t.amount; if (t.splits) for (const sp of t.splits) spent[sp.envelope] = (spent[sp.envelope] || 0) + sp.amount; else if (t.envelope) spent[t.envelope] = (spent[t.envelope] || 0) + t.amount; }
     if (t.type === 'transfer') { transferTotal += t.amount; if (t.envelope) spent[t.envelope] = (spent[t.envelope] || 0) + t.amount; }
+    if (t.type !== 'income') { if (t.status === 'scheduled') scheduledTotal += t.amount; else clearedTotal += t.amount; }
   }
   const groupSum = (group, field) => envelopes.filter((e) => e.group === group).reduce((s, e) => s + (field === 'planned' ? planned[e.id] : spent[e.id]), 0);
   const plannedSpend = groupSum('Needs', 'planned') + groupSum('Wants', 'planned');
@@ -250,6 +306,7 @@ export function buildSummary(monthKey, user) {
   return {
     monthKey, envelopes, txns, planned, spent, incomeReceived, expenseTotal, transferTotal,
     expected, plannedSpend, plannedSave, bills, billsDue, billsPaid, cashOnHand,
+    clearedTotal, scheduledTotal, splitCount,
     needs: { planned: groupSum('Needs', 'planned'), spent: groupSum('Needs', 'spent') },
     wants: { planned: groupSum('Wants', 'planned'), spent: groupSum('Wants', 'spent') },
     savings: { planned: groupSum('Savings & Debt', 'planned'), spent: groupSum('Savings & Debt', 'spent') },
@@ -274,17 +331,21 @@ export function verifyBudgetConsistency(monthKey, user) {
   add(7, 'Bills due before 30 Nov', s.billsDue === 41200 || s.billsDue < 41200, `$${(s.billsDue / 100).toLocaleString('en-US')} still due (was $412)`);
   add(8, 'Debt balances add up', DEBTS.reduce((a, d) => a + d.balance, 0) === 1145000, `$${(DEBTS.reduce((a, d) => a + d.balance, 0) / 100).toLocaleString('en-US')} across 3 debts`);
   add(9, '12-month continuity', HISTORY.filter((h) => !h.partial).every((h) => h.income - h.spent - h.saved === 0), 'Dec 2025 – Oct 2026: income − spent − saved = $0 every month');
-  add(10, 'Every transaction is tagged', s.txns.every((t) => t.date && t.payee && t.amount > 0 && (t.type === 'income' || t.envelope)), 'date, payee, amount and envelope on every row');
+  add(10, 'Every transaction is tagged', s.txns.every((t) => t.date && t.payee && t.amount > 0 && (t.type === 'income' || t.envelope || (t.splits && t.splits.length >= 2 && t.splits.reduce((a, sp) => a + sp.amount, 0) === t.amount))), `date, payee, amount and envelope on every row · ${s.splitCount} split receipt${s.splitCount === 1 ? '' : 's'} re-add to their envelopes`);
   add(11, 'No future transactions', s.txns.every((t) => t.date <= '2026-11-20' || !t.date.startsWith('2026-11')), 'nothing dated after the 20 Nov snapshot');
   add(12, 'Goals are funded, not overfunded', GOALS.every((g) => g.balance >= 0 && g.balance <= g.target), '4 goals, all between $0 and target');
   return { passed: checks.filter((c) => c.passed).length, total: checks.length, checks, summary: s };
 }
 
 // Debt payoff simulation: same debts, same extra payment, two orders.
-// Returns months to debt-free and total interest paid for each method.
+// Returns months to debt-free and total interest paid for each method,
+// plus the month-by-month total balance series behind the payoff curve
+// (series[0] is the starting balance, series[months] is $0).
 export function simulateDebt(extraCents) {
   const run = (order) => {
     const debts = order.map((d) => ({ ...d }));
+    const total0 = debts.reduce((a, d) => a + d.balance, 0);
+    const series = [total0];
     let months = 0, interest = 0;
     let guard = 0;
     while (debts.some((d) => d.balance > 0) && guard < 600) {
@@ -295,8 +356,9 @@ export function simulateDebt(extraCents) {
       // open debt in this method's order.
       for (const d of debts) { if (d.balance <= 0) continue; const pay = Math.min(d.min, d.balance); d.balance -= pay; pool -= pay; }
       for (const d of debts) { if (pool <= 0) break; if (d.balance <= 0) continue; const pay = Math.min(pool, d.balance); d.balance -= pay; pool -= pay; }
+      series.push(debts.reduce((a, d) => a + d.balance, 0));
     }
-    return { months, interest };
+    return { months, interest, series };
   };
   const snowball = [...DEBTS].sort((a, b) => a.balance - b.balance);
   const avalanche = [...DEBTS].sort((a, b) => b.apr - a.apr);

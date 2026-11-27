@@ -48,8 +48,11 @@ export function allocationStrip(s) {
 
 // 30-day checking cushion curve (Nov, actual to the 20th, projected
 // after) with inline milestone annotations, all inside the viewBox.
+// Each callout sits on a crisp pill (card background + border) so the
+// text never touches the curve; the two low labels (12 and 28 Nov) are
+// lifted further above their points, clear of the rising line.
 export function cushionChart() {
-  const W = 560, H = 132, PL = 46, PR = 14, PT = 14, PB = 22;
+  const W = 560, H = 132, PL = 46, PR = 14, PT = 18, PB = 22;
   const max = 660000, min = 80000;
   const X = (d) => PL + ((d - 1) / 29) * (W - PL - PR);
   const Y = (v) => PT + (1 - (v - min) / (max - min)) * (H - PT - PB);
@@ -58,11 +61,18 @@ export function cushionChart() {
   const floorY = Y(100000);
   const ann = [
     { d: 2, v: 626000, text: 'Nov 2 · Payday +$4,800', anchor: 'start', dy: -8 },
-    { d: 12, v: 241000, text: 'Nov 12 · Low $2,410', anchor: 'middle', dy: -10 },
+    { d: 12, v: 241000, text: 'Nov 12 · Low $2,410', anchor: 'middle', dy: -20 },
     { d: 16, v: 390000, text: 'Nov 16 · Payday +$1,920', anchor: 'start', dy: -8 },
-    { d: 28, v: 184800, text: 'Nov 28 · Freelance +$700', anchor: 'end', dy: -8 },
+    { d: 28, v: 184800, text: 'Nov 28 · Freelance +$700', anchor: 'end', dy: -16 },
   ];
   const dots = ann.map((a) => `<circle cx="${X(a.d).toFixed(1)}" cy="${Y(a.v).toFixed(1)}" r="3.5" fill="#0F766E" stroke="#fff" stroke-width="1.5"/>`).join('');
+  // Pill behind each label: ~6.3px per 11px semibold char, 7px side pad.
+  const pills = ann.map((a) => {
+    const w = a.text.length * 6.3 + 14, x0 = X(a.d);
+    const x = a.anchor === 'middle' ? x0 - w / 2 : a.anchor === 'end' ? x0 - w + 7 : x0 - 7;
+    const y = Y(a.v) + a.dy - 14;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="6" fill="var(--card)" stroke="var(--border)" stroke-width="1"/>`;
+  }).join('');
   const labels = ann.map((a) => `<text x="${X(a.d).toFixed(1)}" y="${(Y(a.v) + a.dy).toFixed(1)}" text-anchor="${a.anchor}" font-size="11" font-weight="600" fill="var(--ink)">${esc(a.text)}</text>`).join('');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="30-day checking cushion">
     <line x1="${PL}" y1="${floorY}" x2="${W - PR}" y2="${floorY}" stroke="#BE123C" stroke-width="1.5" stroke-dasharray="5 4"/>
@@ -71,7 +81,7 @@ export function cushionChart() {
     <text x="${X(20)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">today · 20 Nov</text>
     <polygon points="${area}" fill="#0F766E" opacity="0.10"/>
     <polyline points="${pts}" fill="none" stroke="#0F766E" stroke-width="2.5" stroke-linejoin="round"/>
-    ${dots}${labels}
+    ${dots}${pills}${labels}
   </svg>`;
 }
 
@@ -99,8 +109,10 @@ export function sixMonthChart() {
 // share of spending, with planned vs actual in the title tooltip.
 export function varianceDonut(s) {
   const top = [...ENVELOPES].filter((e) => !e.savings).sort((a, b) => s.spent[b.id] - s.spent[a.id]).slice(0, 5);
-  const other = ENVELOPES.filter((e) => !e.savings && !top.includes(e)).reduce((a, e) => a + s.spent[e.id], 0);
-  const slices = [...top.map((e) => ({ label: e.name, value: s.spent[e.id], planned: s.planned[e.id], color: e.color })), { label: 'Other needs & wants', value: other, planned: 0, color: '#94A3B8' }];
+  const rest = ENVELOPES.filter((e) => !e.savings && !top.includes(e));
+  const other = rest.reduce((a, e) => a + s.spent[e.id], 0);
+  const otherPlanned = rest.reduce((a, e) => a + s.planned[e.id], 0);
+  const slices = [...top.map((e) => ({ label: e.name, value: s.spent[e.id], planned: s.planned[e.id], color: e.color })), { label: 'Other needs & wants', value: other, planned: otherPlanned, color: '#94A3B8' }];
   const total = slices.reduce((a, x) => a + x.value, 0) || 1;
   const R = 74, C = 2 * Math.PI * R;
   let off = 0;
@@ -112,6 +124,31 @@ export function varianceDonut(s) {
   }).join('');
   const rows = slices.map((x) => `<div class="donut-row"><i style="background:${x.color}"></i><span>${esc(x.label)}</span><b>${fmt(x.value)}</b><span class="muted">plan ${fmt(x.planned)}</span></div>`).join('');
   return `<div class="donut-wrap"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Spending by envelope"><g transform="rotate(-90 90 90)">${segs}</g><text x="90" y="86" text-anchor="middle" font-size="20" font-weight="700" fill="var(--ink)">${fmt(total)}</text><text x="90" y="104" text-anchor="middle" font-size="10" fill="var(--muted)">spent to 20 Nov</text></svg><div class="donut-legend">${rows}</div></div>`;
+}
+
+// Debt payoff curve: total balance over time under the current plan
+// (snowball with the effective extra payment) vs paying minimums only.
+// Both series come from simulateDebt, so the curve can never disagree
+// with the months / interest figures beside it.
+export function debtCurve(current, minimums) {
+  const W = 560, H = 132, PL = 46, PR = 14, PT = 16, PB = 22;
+  const maxV = 1145000;
+  const maxM = Math.max(current.months, minimums.months, 1);
+  const X = (m) => PL + (m / maxM) * (W - PL - PR);
+  const Y = (v) => PT + (1 - v / maxV) * (H - PT - PB);
+  const line = (series, color, dashed) => {
+    const pts = series.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"${dashed ? ' stroke-dasharray="6 4"' : ''}/>`;
+  };
+  const same = current.months === minimums.months;
+  const endCur = `<circle cx="${X(current.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#0F766E"/><text x="${Math.min(X(current.months) + 8, W - 70).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" font-size="11" font-weight="700" fill="#0F766E">Debt-free · ${current.months} mo</text>`;
+  const endMin = same ? '' : `<circle cx="${X(minimums.months).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="#BE123C"/><text x="${(X(minimums.months) - 8).toFixed(1)}" y="${(Y(0) - 8).toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="#BE123C">Minimums · ${minimums.months} mo</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Debt payoff curve">
+    <text x="${PL}" y="${PT - 4}" font-size="10" fill="var(--muted)">Total debt $11,450 → $0</text>
+    <line x1="${PL}" y1="${Y(0)}" x2="${W - PR}" y2="${Y(0)}" stroke="var(--border)" stroke-width="1"/>
+    ${same ? line(minimums.series, '#BE123C', true) : line(minimums.series, '#BE123C', true) + line(current.series, '#0F766E', false)}
+    ${endCur}${endMin}
+  </svg><div class="strip-legend"><span class="strip-leg"><i style="background:#0F766E"></i>Current plan</span><span class="strip-leg"><i style="background:#BE123C"></i>Minimums only</span></div>`;
 }
 
 // Twelve-month household cash-flow trend: income bars, spending bars,

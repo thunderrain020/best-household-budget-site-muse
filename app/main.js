@@ -19,10 +19,10 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 function loadUser() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [] };
+    if (!raw) return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [], txnStatus: {} };
     const u = JSON.parse(raw);
-    return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [], ...u };
-  } catch { return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [] }; }
+    return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [], txnStatus: {}, ...u, txnStatus: u.txnStatus || {} };
+  } catch { return { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [], txnStatus: {} }; }
 }
 function saveUser() { try { localStorage.setItem(STORE_KEY, JSON.stringify(state.user)); } catch { /* private mode: edits still work for the session */ } }
 
@@ -31,7 +31,8 @@ const state = {
   theme: localStorage.getItem('alderledger-theme') || 'light',
   groupFilter: 'All', selectedEnv: 'dining', chartMode: 'cushion',
   compareA: '2026-11', compareB: 'target', analyticsTab: 'variance',
-  debtExtra: 30000, ledgerSearch: '', ledgerGroup: 'All', ledgerEnv: '',
+  debtExtra: 30000, debtTrims: { dining: false, subs: false, fun: false }, debtShock: 0,
+  ledgerSearch: '', ledgerGroup: 'All', ledgerEnv: '',
   ledgerFrom: '', ledgerTo: '', ledgerSort: 'date-desc', sortEnv: 'spent-desc',
   user: loadUser(), menuOpen: false, editingTxn: null,
 };
@@ -89,7 +90,8 @@ function download(name, text, type) {
 const csvCell = (v) => { const s = String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 function txnsCsv(s) {
   const head = 'Date,Payee,Envelope,Type,Amount USD\n';
-  const rows = s.txns.map((x) => [x.date, x.payee, x.envelope || '', x.type, (x.amount / 100).toFixed(2)].map(csvCell).join(',')).join('\n');
+  const envLabel = (x) => x.splits ? x.splits.map((sp) => sp.envelope).join('+') : (x.envelope || '');
+  const rows = s.txns.map((x) => [x.date, x.payee, envLabel(x), x.type, (x.amount / 100).toFixed(2)].map(csvCell).join(',')).join('\n');
   return head + rows + '\n';
 }
 function summaryText(s) {
@@ -115,23 +117,53 @@ function fallbackCopy(text) {
 }
 
 // ---- Add / edit transaction modal -------------------------------------
+// Live cent-balance for split receipts: the parts must add to the
+// receipt total exactly, or Save stays disabled.
+function updateSplitBalance(form) {
+  const total = Math.round((Number(form.amount.value) || 0) * 100);
+  const parts = [...form.querySelectorAll('[name="split-amount"]')].map((i) => Math.round((Number(i.value) || 0) * 100));
+  const diff = total - parts.reduce((a, b) => a + b, 0);
+  const note = form.querySelector('#split-balance');
+  const save = form.querySelector('button[type="submit"]');
+  const splitOn = form.classList.contains('split-on');
+  if (note) {
+    note.textContent = diff === 0 ? 'Balanced ($0.00)' : `Off by ${fmt2(diff)} — adjust a split`;
+    note.className = 'split-balance ' + (diff === 0 ? 'good' : 'bad');
+  }
+  if (save) save.disabled = splitOn && diff !== 0;
+}
+function splitRowHtml(s, envId, amount) {
+  return `<div class="split-row"><select name="split-env">${s.envelopes.map((e) => `<option value="${e.id}"${e.id === envId ? ' selected' : ''}>${esc(e.name)}</option>`).join('')}</select><input name="split-amount" type="number" min="0.01" step="0.01" value="${(amount / 100).toFixed(2)}" required aria-label="Split amount in dollars"></div>`;
+}
 function openModal(editId) {
   const s = buildSummary(state.month, state.user);
   const existing = editId ? (state.user.txns || []).find((x) => x.id === editId) : null;
   state.editingTxn = editId || null;
   const maxDate = state.month === '2026-11' ? '2026-11-20' : `${state.month}-${state.month === '2026-10' ? '31' : '30'}`;
   const t0 = existing || { date: state.month === '2026-11' ? '2026-11-20' : `${state.month}-15`, payee: '', envelope: 'groceries', type: 'expense', amount: 2500 };
+  const splitOn = !!t0.splits;
+  const splitRows = splitOn
+    ? t0.splits.map((sp) => splitRowHtml(s, sp.envelope, sp.amount)).join('')
+    : splitRowHtml(s, 'groceries', Math.floor(t0.amount / 2)) + splitRowHtml(s, 'dining', t0.amount - Math.floor(t0.amount / 2));
   const modal = document.getElementById('modal');
-  modal.innerHTML = `<div class="modal-backdrop" data-action="modal-close"></div><form class="modal-card" data-form="txn">
+  modal.innerHTML = `<div class="modal-backdrop" data-action="modal-close"></div><form class="modal-card${splitOn ? ' split-on' : ''}" data-form="txn">
     <h2>${existing ? t(state.lang, 'editTxn') : t(state.lang, 'addTxn')}</h2>
     <label>Date <input name="date" type="date" value="${t0.date}" max="${maxDate}" required></label>
     <label>Payee <input name="payee" type="text" value="${esc(t0.payee)}" maxlength="60" required placeholder="e.g. GreenMart Supermarket"></label>
-    <label>Envelope <select name="envelope">${s.envelopes.map((e) => `<option value="${e.id}"${e.id === t0.envelope ? ' selected' : ''}>${esc(e.name)} (${esc(e.group)})</option>`).join('')}</select></label>
-    <label>Type <select name="type"><option value="expense"${t0.type === 'expense' ? ' selected' : ''}>Expense</option><option value="transfer"${t0.type === 'transfer' ? ' selected' : ''}>Savings transfer</option><option value="income"${t0.type === 'income' ? ' selected' : ''}>Income</option></select></label>
+    <label class="single-env">Envelope <select name="envelope">${s.envelopes.map((e) => `<option value="${e.id}"${e.id === t0.envelope ? ' selected' : ''}>${esc(e.name)} (${esc(e.group)})</option>`).join('')}</select></label>
+    <label class="single-env">Type <select name="type"><option value="expense"${t0.type === 'expense' ? ' selected' : ''}>Expense</option><option value="transfer"${t0.type === 'transfer' ? ' selected' : ''}>Savings transfer</option><option value="income"${t0.type === 'income' ? ' selected' : ''}>Income</option></select></label>
     <label>Amount $ <input name="amount" type="number" min="0.01" step="0.01" value="${(t0.amount / 100).toFixed(2)}" required></label>
+    <label class="split-toggle"><input type="checkbox" data-action="split-toggle"${splitOn ? ' checked' : ''}> Split receipt across 2–3 envelopes</label>
+    <div class="split-rows"${splitOn ? '' : ' hidden'}>
+      <div class="split-head"><span>Envelope</span><span>Amount $</span></div>
+      ${splitRows}
+      <button type="button" class="btn btn-sm" data-action="split-add-row">+ Add a 3rd envelope</button>
+      <p class="split-balance good" id="split-balance">Balanced ($0.00)</p>
+    </div>
     <div class="btn-row"><button class="btn btn-primary" type="submit">${t(state.lang, 'save')}</button><button class="btn" type="button" data-action="modal-close">${t(state.lang, 'cancel')}</button></div>
-    <p class="fineprint">Saved in this browser and added to every total, KPI and audit check on the site. Dates after the 20 Nov snapshot are not allowed for November.</p></form>`;
+    <p class="fineprint">Saved in this browser and added to every total, KPI and audit check on the site. Dates after the 20 Nov snapshot are not allowed for November. A split receipt is one transaction whose parts land in different envelopes — the parts must add to the total exactly.</p></form>`;
   modal.classList.add('open');
+  updateSplitBalance(modal.querySelector('form'));
 }
 function closeModal() { document.getElementById('modal').innerHTML = ''; document.getElementById('modal').classList.remove('open'); state.editingTxn = null; }
 
@@ -179,8 +211,39 @@ document.addEventListener('click', (ev) => {
     const bill = BILLS.find((b) => b.id === el.dataset.bill);
     if (bill && state.month === '2026-11' && !state.user.paidBills.includes(bill.id)) {
       state.user.paidBills.push(bill.id);
-      state.user.txns.push({ id: `user-${Date.now()}`, date: '2026-11-20', payee: bill.name, envelope: bill.envelope, type: 'expense', amount: bill.amount, reconciled: true });
+      state.user.txns.push({ id: `user-${Date.now()}`, date: '2026-11-20', payee: bill.name, envelope: bill.envelope, type: 'expense', amount: bill.amount, reconciled: true, status: 'cleared' });
       saveUser(); render();
+    }
+  } else if (action === 'cal-bill') {
+    // Calendar chip: toggle a bill between Paid and Scheduled. Paying
+    // adds the matching expense transaction; un-paying removes it, so
+    // the ledger, bills due and audit all move together.
+    const bill = BILLS.find((b) => b.id === el.dataset.bill);
+    if (bill && state.month === '2026-11') {
+      if (state.user.paidBills.includes(bill.id)) {
+        state.user.paidBills = state.user.paidBills.filter((id) => id !== bill.id);
+        state.user.txns = (state.user.txns || []).filter((x) => !(x.payee === bill.name && x.amount === bill.amount && x.envelope === bill.envelope));
+      } else {
+        state.user.paidBills.push(bill.id);
+        state.user.txns.push({ id: `user-${Date.now()}`, date: '2026-11-20', payee: bill.name, envelope: bill.envelope, type: 'expense', amount: bill.amount, reconciled: true, status: 'cleared' });
+      }
+      saveUser(); render();
+    }
+  } else if (action === 'txn-status') {
+    const txn = s.txns.find((x) => x.id === el.dataset.id);
+    if (txn && txn.type !== 'income') {
+      state.user.txnStatus = state.user.txnStatus || {};
+      state.user.txnStatus[txn.id] = txn.status === 'cleared' ? 'scheduled' : 'cleared';
+      saveUser(); render();
+    }
+  } else if (action === 'debt-shock') { state.debtShock = Number(el.dataset.shock); render(); }
+  else if (action === 'split-add-row') {
+    const form = el.closest('form');
+    const rows = form.querySelectorAll('.split-row');
+    if (rows.length < 3) {
+      el.insertAdjacentHTML('beforebegin', splitRowHtml(buildSummary(state.month, state.user), 'fun', 0));
+      if (form.querySelectorAll('.split-row').length >= 3) el.style.display = 'none';
+      updateSplitBalance(form);
     }
   } else if (action === 'export') doExport(el.dataset.kind, s);
   else if (action === 'apply-503020') apply503020();
@@ -192,7 +255,7 @@ document.addEventListener('click', (ev) => {
     saveUser(); render();
   } else if (action === 'reset-demo') {
     if (window.confirm('Reset all your additions, plan edits, paid bills and the $48 move? The demo ledger returns to its original figures.')) {
-      state.user = { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [] };
+      state.user = { txns: [], planned: {}, paidBills: [], moved48: false, customEnvs: [], txnStatus: {} };
       saveUser(); render();
     }
   }
@@ -206,12 +269,23 @@ document.addEventListener('change', (ev) => {
   else if (el.dataset.action === 'ledger-group') { state.ledgerGroup = el.value; render(); }
   else if (el.dataset.action === 'ledger-env') { state.ledgerEnv = el.value; render(); }
   else if (el.dataset.action === 'debt-extra') { state.debtExtra = Number(el.value); render(); }
+  else if (el.dataset.action === 'debt-trim') { state.debtTrims[el.dataset.trim] = el.checked; render(); }
+  else if (el.dataset.action === 'split-toggle') {
+    const form = el.closest('form');
+    form.classList.toggle('split-on', el.checked);
+    form.querySelector('.split-rows').hidden = !el.checked;
+    const addBtn = form.querySelector('[data-action="split-add-row"]');
+    if (addBtn) addBtn.style.display = form.querySelectorAll('.split-row').length >= 3 ? 'none' : '';
+    updateSplitBalance(form);
+  }
   else if (el.hasAttribute('data-planned-env')) { render(); }
   else if (el.dataset.input === 'ledger-from') { state.ledgerFrom = el.value; render(); }
   else if (el.dataset.input === 'ledger-to') { state.ledgerTo = el.value; render(); }
 });
 
 document.addEventListener('input', (ev) => {
+  const txnForm = ev.target.closest('[data-form="txn"]');
+  if (txnForm) { updateSplitBalance(txnForm); return; }
   const el = ev.target.closest('[data-input], [data-planned-env]');
   if (!el) return;
   if (el.dataset.input === 'ledger-search') { state.ledgerSearch = el.value; if (route() === 'ledger') render(); const inp = document.querySelector('[data-input="ledger-search"]'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
@@ -237,7 +311,17 @@ document.addEventListener('submit', (ev) => {
     const fd = new FormData(form);
     const amount = Math.round(Number(fd.get('amount')) * 100);
     if (!fd.get('payee') || !amount || amount <= 0) return;
-    const txn = { id: state.editingTxn || `user-${Date.now()}`, date: String(fd.get('date')), payee: String(fd.get('payee')).trim(), envelope: String(fd.get('envelope')), type: String(fd.get('type')), amount, reconciled: true };
+    const splitOn = form.classList.contains('split-on');
+    let txn;
+    if (splitOn) {
+      const envs = fd.getAll('split-env').map(String);
+      const amts = fd.getAll('split-amount').map((v) => Math.round(Number(v) * 100));
+      const splits = envs.map((envelope, i) => ({ envelope, amount: amts[i] })).filter((sp) => sp.amount > 0);
+      if (splits.length < 2 || splits.length > 3 || splits.reduce((a, sp) => a + sp.amount, 0) !== amount) return;
+      txn = { id: state.editingTxn || `user-${Date.now()}`, date: String(fd.get('date')), payee: String(fd.get('payee')).trim(), envelope: null, type: 'expense', amount, splits, reconciled: true, status: 'cleared' };
+    } else {
+      txn = { id: state.editingTxn || `user-${Date.now()}`, date: String(fd.get('date')), payee: String(fd.get('payee')).trim(), envelope: String(fd.get('envelope')), type: String(fd.get('type')), amount, reconciled: true, status: 'cleared' };
+    }
     if (state.editingTxn) state.user.txns = (state.user.txns || []).map((x) => (x.id === state.editingTxn ? txn : x));
     else state.user.txns.push(txn);
     saveUser(); closeModal(); render();
@@ -253,6 +337,14 @@ document.addEventListener('submit', (ev) => {
   }
 });
 
-window.addEventListener('hashchange', () => { state.menuOpen = false; render(); window.scrollTo(0, 0); });
+function scrollToPayday() {
+  if (location.hash.includes('payday')) {
+    const el = document.getElementById('payday-calendar');
+    if (el) el.scrollIntoView();
+  }
+}
+
+window.addEventListener('hashchange', () => { state.menuOpen = false; render(); window.scrollTo(0, 0); scrollToPayday(); });
 
 render();
+scrollToPayday();

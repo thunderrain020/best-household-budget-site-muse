@@ -11,10 +11,15 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 export function renderLedger(state, s) {
   const lang = state.lang;
   const q = (state.ledgerSearch || '').toLowerCase();
+  const envName = (id) => (s.envelopes.find((e) => e.id === id) || {}).name || id;
   let rows = [...s.txns];
-  if (q) rows = rows.filter((x) => x.payee.toLowerCase().includes(q) || x.date.includes(q) || (x.envelope || '').toLowerCase().includes(q));
-  if (state.ledgerGroup && state.ledgerGroup !== 'All') rows = rows.filter((x) => { const e = s.envelopes.find((e) => e.id === x.envelope); return x.type === 'income' ? state.ledgerGroup === 'Income' : e && e.group === state.ledgerGroup; });
-  if (state.ledgerEnv) rows = rows.filter((x) => x.envelope === state.ledgerEnv);
+  if (q) rows = rows.filter((x) => x.payee.toLowerCase().includes(q) || x.date.includes(q) || (x.envelope || '').toLowerCase().includes(q) || (x.splits || []).some((sp) => sp.envelope.toLowerCase().includes(q) || envName(sp.envelope).toLowerCase().includes(q)));
+  if (state.ledgerGroup && state.ledgerGroup !== 'All') rows = rows.filter((x) => {
+    if (x.type === 'income') return state.ledgerGroup === 'Income';
+    if (x.splits) return x.splits.some((sp) => { const e = s.envelopes.find((e) => e.id === sp.envelope); return e && e.group === state.ledgerGroup; });
+    const e = s.envelopes.find((e) => e.id === x.envelope); return e && e.group === state.ledgerGroup;
+  });
+  if (state.ledgerEnv) rows = rows.filter((x) => x.envelope === state.ledgerEnv || (x.splits || []).some((sp) => sp.envelope === state.ledgerEnv));
   if (state.ledgerFrom) rows = rows.filter((x) => x.date >= state.ledgerFrom);
   if (state.ledgerTo) rows = rows.filter((x) => x.date <= state.ledgerTo);
   const sort = state.ledgerSort || 'date-desc';
@@ -29,12 +34,19 @@ export function renderLedger(state, s) {
   const body = rows.map((x) => {
     const env = s.envelopes.find((e) => e.id === x.envelope);
     const mine = (state.user.txns || []).some((u) => u.id === x.id);
-    return `<tr><td>${x.date}</td><td>${esc(x.payee)}${x.reconciled ? ' <span class="rec" title="Reconciled">✓</span>' : ''}</td><td>${x.type === 'income' ? '<span class="pill pill-save">Income</span>' : env ? `<span class="pill">${esc(env.group)}</span> ${esc(env.name)}` : '—'}</td><td class="num ${x.type === 'income' ? 'good' : ''}">${x.type === 'income' ? '+' : '−'}${fmt(x.amount)}</td>
+    const envCell = x.splits
+      ? `<span class="pill pill-save">Split</span> ${x.splits.map((sp) => `${esc(envName(sp.envelope))} ${fmt(sp.amount)}`).join(' + ')}`
+      : x.type === 'income' ? '<span class="pill pill-save">Income</span>' : env ? `<span class="pill">${esc(env.group)}</span> ${esc(env.name)}` : '—';
+    const status = x.type === 'income'
+      ? '<span class="pill good">Cleared ✓</span>'
+      : `<button class="pill-btn status-pill${x.status === 'scheduled' ? ' scheduled' : ''}" data-action="txn-status" data-id="${x.id}" title="Click to toggle cleared / scheduled">${x.status === 'scheduled' ? 'Scheduled' : 'Cleared ✓'}</button>`;
+    return `<tr><td>${x.date}</td><td>${esc(x.payee)}${x.reconciled ? ' <span class="rec" title="Reconciled">✓</span>' : ''}</td><td>${envCell}</td><td class="num ${x.type === 'income' ? 'good' : ''}">${x.type === 'income' ? '+' : '−'}${fmt(x.amount)}</td>
+    <td>${status}</td>
     <td>${mine ? `<button class="btn btn-sm" data-action="edit-txn" data-id="${x.id}">Edit</button> <button class="btn btn-sm" data-action="delete-txn" data-id="${x.id}">${t(lang, 'delete')}</button>` : '<span class="muted">demo</span>'}</td></tr>`;
-  }).join('') || `<tr><td colspan="5" class="muted">No transactions match — clear the search or filters.</td></tr>`;
+  }).join('') || `<tr><td colspan="6" class="muted">No transactions match — clear the search or filters.</td></tr>`;
   const totals = { income: rows.filter((x) => x.type === 'income').reduce((a, x) => a + x.amount, 0), out: rows.filter((x) => x.type !== 'income').reduce((a, x) => a + x.amount, 0) };
   return `
-  <section class="page-head"><h1>${esc(t(lang, 'ledgerTitle'))}</h1><p class="muted">${rows.length} of ${s.txns.length} transactions · ${s.monthKey} · income ${fmt(totals.income)} · out ${fmt(totals.out)}</p></section>
+  <section class="page-head"><h1>${esc(t(lang, 'ledgerTitle'))}</h1><p class="muted">${rows.length} of ${s.txns.length} transactions · ${s.monthKey} · income ${fmt(totals.income)} · out ${fmt(totals.out)} · cleared ${fmt(s.clearedTotal)} · scheduled ${fmt(s.scheduledTotal)} · ${s.splitCount} split receipt${s.splitCount === 1 ? '' : 's'}</p></section>
   <section class="card">
     <div class="ledger-tools">
       <input type="search" placeholder="${esc(t(lang, 'searchPh'))}" value="${esc(state.ledgerSearch || '')}" data-input="ledger-search" aria-label="Search ledger">
@@ -48,7 +60,7 @@ export function renderLedger(state, s) {
       <button class="btn" data-action="export" data-kind="json">${t(lang, 'downloadJson')}</button>
       <button class="btn" data-action="export" data-kind="copy">${t(lang, 'copySummary')}</button>
       <button class="btn btn-danger" data-action="reset-demo">${t(lang, 'resetDemo')}</button></div>
-    <div class="table-wrap"><table class="data-table"><thead><tr>${th('Date', 'date-desc')}${th('Payee', 'payee-asc')}<th>Envelope</th>${th('Amount', 'amount-desc')}<th></th></tr></thead><tbody>${body}</tbody></table></div>
-    <p class="fineprint">Demo rows are the generated ledger; rows you add are editable and deletable, saved in this browser, and included in every total on the site. Reset Demo Data clears only your additions and plan edits.</p>
+    <div class="table-wrap"><table class="data-table"><thead><tr>${th('Date', 'date-desc')}${th('Payee', 'payee-asc')}<th>Envelope</th>${th('Amount', 'amount-desc')}<th>Status</th><th></th></tr></thead><tbody>${body}</tbody></table></div>
+    <p class="fineprint">Demo rows are the generated ledger; rows you add are editable and deletable, saved in this browser, and included in every total on the site. Click a status pill to toggle Cleared ✓ / Scheduled — scheduled money is still counted in spending, but the cushion card shows it as pending until it clears the bank. Reset Demo Data clears only your additions and plan edits.</p>
   </section>`;
 }

@@ -3,7 +3,7 @@
 // cushion / 6-month chart switcher, upcoming bills and latest spending.
 // Every number comes from buildSummary() for the selected month.
 
-import { ENVELOPES, HISTORY, SNAPSHOT, GOALS, fmt, fmt2, pct, envById } from '../data.js';
+import { ENVELOPES, HISTORY, SNAPSHOT, GOALS, CUSHION, fmt, fmt2, pct, envById } from '../data.js';
 import { sparkline, allocationStrip, cushionChart, sixMonthChart } from '../charts.js';
 import { t } from '../i18n.js';
 
@@ -80,8 +80,8 @@ export function renderHome(state, s, audit) {
         <div class="pills"><button class="pill-btn${state.chartMode === 'cushion' ? ' on' : ''}" data-action="chart-mode" data-mode="cushion">Cushion</button><button class="pill-btn${state.chartMode === 'sixmonth' ? ' on' : ''}" data-action="chart-mode" data-mode="sixmonth">6-Month</button></div>
       </div>
       ${state.chartMode === 'cushion' ? cushionChart() : sixMonthChart()}
-      <div class="btn-row"><button class="btn btn-sm" data-action="export" data-kind="csv">${t(lang, 'csvBtn')}</button><button class="btn btn-sm" data-action="export" data-kind="json">${t(lang, 'jsonBtn')}</button><button class="btn btn-sm" data-action="export" data-kind="copy">${t(lang, 'copySummary')}</button><a class="btn btn-sm" href="#/ledger">${t(lang, 'openLedger')}</a></div>
-      <h3>${esc(t(lang, 'upcoming'))} · ${fmt(s.billsDue)} due</h3>
+      <div class="btn-row"><span class="pending-note">${state.month === '2026-11' && s.scheduledTotal > 0 ? `Pending ${fmt(s.scheduledTotal)} · cleared ${fmt(CUSHION[19] + s.scheduledTotal)}` : state.month === '2026-11' ? `All cleared · balance ${fmt(CUSHION[19])}` : ''}</span><button class="btn btn-sm" data-action="export" data-kind="csv">${t(lang, 'csvBtn')}</button><button class="btn btn-sm" data-action="export" data-kind="json">${t(lang, 'jsonBtn')}</button><button class="btn btn-sm" data-action="export" data-kind="copy">${t(lang, 'copySummary')}</button><a class="btn btn-sm" href="#/ledger">${t(lang, 'openLedger')}</a></div>
+      <div class="bills-head"><h3>${esc(t(lang, 'upcoming'))} · ${fmt(s.billsDue)} due</h3><a href="#/audit/payday">Payday Calendar →</a></div>
       ${billsHtml}
     </div>
   </section>
