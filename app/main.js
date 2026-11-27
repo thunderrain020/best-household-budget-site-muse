@@ -30,7 +30,7 @@ const state = {
   month: '2026-11', lang: localStorage.getItem('alderledger-lang') || 'en',
   theme: localStorage.getItem('alderledger-theme') || 'light',
   groupFilter: 'All', selectedEnv: 'dining', chartMode: 'cushion',
-  compareA: '2026-11', compareB: 'target', analyticsTab: 'variance', debtMethod: 'snowball',
+  compareA: '2026-11', compareB: 'target', analyticsTab: 'variance', stripFilter: 'all', debtMethod: 'snowball',
   debtExtra: 30000, debtTrims: { dining: false, subs: false, fun: false }, debtShock: 0,
   ledgerSearch: '', ledgerGroup: 'All', ledgerEnv: '',
   ledgerFrom: '', ledgerTo: '', ledgerSort: 'date-desc', sortEnv: 'spent-desc',
@@ -262,6 +262,7 @@ document.addEventListener('click', (ev) => {
   else if (action === 'apply-503020') apply503020();
   else if (action === 'debt-method') { state.debtMethod = el.dataset.method; render(); }
   else if (action === 'atab') { location.hash = '#/analytics/' + el.dataset.tab; }
+  else if (action === 'strip-filter') { state.stripFilter = el.dataset.filter; render(); }
   else if (action === 'sort-env') { state.sortEnv = el.dataset.key; render(); }
   else if (action === 'ledger-sort') { state.ledgerSort = el.dataset.key; render(); }
   else if (action === 'delete-txn') {

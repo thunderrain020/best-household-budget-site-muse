@@ -68,15 +68,24 @@ function registerStrip(state, s, audit) {
   const lowEod = Math.min(...eods);
   const lowDay = lowEod === decBuffer ? 'Dec 2' : dLabel(dueBills.find((b) => CUSHION[Number(b.due.slice(8, 10)) - 1] === lowEod).due);
   const floorOk = lowEod >= 100000;
-  // --- Right: split-receipt register. The top three rows stay single-line;
-  // Corner Market is expanded with its live split breakdown, computed from
-  // the actual splits (Groceries $153.60 + Gifts $43.68 = $197.28) — the
-  // prompt's $142 / $55 figures are not the seeded split, so they are not
-  // used; the strip reconciles with the ledger instead.
+  // --- Account reconciliation bar: checking (cleared balance = the 20 Nov
+  // EOD plus the pending scheduled amount, the same formula the Overview's
+  // "Pending · cleared" note uses), the emergency HYSA, total debt, and the
+  // net cash that reconciles them. All computed, none hardcoded.
+  const checkingCleared = CUSHION[19] + s.scheduledTotal;
+  const hysa = GOALS.find((g) => g.id === 'emergency').balance;
+  const debtTotal = DEBTS.reduce((a, d) => a + d.balance, 0);
+  const netCash = checkingCleared + hysa - debtTotal;
+  const auditOk = audit && audit.passed === audit.total;
+  const reconBar = `<div class="recon-bar">Checking <b>${fmt(checkingCleared)}</b> cleared (${fmt(s.scheduledTotal)} pend.) · HYSA <b>${fmt(hysa)}</b> · Debt <b>−${fmt(debtTotal)}</b> · Net Cash <b>${fmt(netCash)}</b> · <b class="${auditOk ? 'good' : 'bad'}">${auditOk ? 'Reconciled ✓' : 'Reconciled — check'}</b></div>`;
+  // --- Right: split-receipt register, with live filter chips. The strip
+  // shows the top 4 rows by date; the chips filter that set (All shows all
+  // four, Split shows the two split receipts, Scheduled shows Target alone).
   const splits = s.txns.filter((x) => x.splits);
   const recent = [...s.txns].filter((x) => !x.splits && x.type === 'expense').sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 2);
   const corner = splits.find((x) => x.payee === 'Corner Market');
-  const others = [...splits.filter((x) => x !== corner), ...recent].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 3);
+  const filter = state.stripFilter || 'all';
+  const visible = (x) => filter === 'all' || (filter === 'cleared' && x.status === 'cleared') || (filter === 'scheduled' && x.status === 'scheduled') || (filter === 'split' && !!x.splits);
   const regRow = (x) => {
     // The expanded Corner Market row drops the "· Balanced $0.00 ✓" from
     // its sub-line — the split check directly below it carries the full
@@ -86,20 +95,21 @@ function registerStrip(state, s, audit) {
       : esc(envName(x.envelope));
     return `<div class="reg-row"><span class="reg-date">${dLabel(x.date)}</span><span class="reg-payee"><b>${esc(x.payee)}</b> <span class="muted">· ${sub}</span></span><b class="num">${fmt(x.amount)}</b><button class="pill-btn status-pill${x.status === 'scheduled' ? ' scheduled' : ''}" data-action="txn-status" data-id="${x.id}" title="Click to toggle cleared / scheduled">${x.status === 'scheduled' ? 'Scheduled' : 'Cleared ✓'}</button></div>`;
   };
-  const regRows = others.map(regRow).join('');
+  const regRows = [...splits.filter((x) => x !== corner), ...recent].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 3).filter(visible).map(regRow).join('');
   const splitSum = corner.splits.reduce((a, sp) => a + sp.amount, 0);
   const splitBal = corner.amount - splitSum;
-  const splitCheck = `${regRow(corner)}
-    <div class="split-check">${corner.splits.map((sp) => `<b>${esc(shortEnv(sp.envelope))} ${fmt2(sp.amount)}</b>`).join(' + ')} = <b>Split Sum ${fmt2(splitSum)}</b> · Balanced <b class="good">${fmt2(splitBal)} ✓</b></div>`;
-  const auditOk = audit && audit.passed === audit.total;
+  const splitCheck = visible(corner) ? `${regRow(corner)}
+    <div class="split-check">${corner.splits.map((sp) => `<b>${esc(shortEnv(sp.envelope))} ${fmt2(sp.amount)}</b>`).join(' + ')} = <b>Split Sum ${fmt2(splitSum)}</b> · Balanced <b class="good">${fmt2(splitBal)} ✓</b></div>` : '';
+  const chip = (f, label) => `<button class="reg-chip${filter === f ? ' on' : ''}" data-action="strip-filter" data-filter="${f}" title="Filter the register">${label}</button>`;
   return `<section class="card strip-card"><div class="card-head"><h2>Reconciled cash-flow &amp; register</h2><span class="pill">Nov 2026 · to 20 Nov</span></div>
     <div class="sched-cols">
       <div><h3>Payday &amp; bill draft calendar</h3>
+        ${reconBar}
         <div class="cal-tiles">${tiles}${dec2}</div>
         <p class="strip-floor">Window low <b>${fmt(lowEod)}</b> (${esc(lowDay)}) · $1,000 floor · <b class="${floorOk ? 'good' : 'bad'}">${floorOk ? 'PASS ✓' : 'BELOW — check'}</b></p>
         <p class="strip-link"><a href="#/audit">${audit ? `${audit.passed}/${audit.total} Audit ${auditOk ? 'PASS ✓' : '— check'}` : 'Audit'} · Full 30-Day Calendar →</a></p>
       </div>
-      <div><h3>Split-receipt register</h3>
+      <div><div class="reg-head"><h3>Split-receipt register</h3><div class="reg-filters">${chip('all', `All (${s.txns.length})`)}${chip('cleared', 'Cleared')}${chip('scheduled', 'Scheduled')}${chip('split', 'Split')}</div></div>
         ${regRows}
         ${splitCheck}
         <div class="strip-actions"><button class="btn btn-sm" data-action="export" data-kind="csv">Download CSV</button><button class="btn btn-sm" data-action="export" data-kind="json">JSON</button><a class="btn btn-sm btn-primary" href="#/ledger">+ Split Receipt</a></div>

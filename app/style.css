@@ -317,7 +317,16 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
 /* V6: the strip must end at <= 785px, so its rows and actions are tighter
    than the rest of the app — the register rows lose 3px of padding each
    and the actions sit 4px closer to the split check. */
-.strip-card .reg-row { padding: 3px 0; }
+.strip-card .reg-row { padding: 2px 0; }
+.recon-bar { font-size: 11px; line-height: 1.45; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; margin: 2px 0 6px; }
+.recon-bar b { color: var(--ink); }
+.recon-bar b.good { color: var(--teal); }
+.reg-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.reg-head h3 { margin: 2px 0; }
+.reg-filters { display: flex; gap: 5px; flex-wrap: wrap; }
+.reg-chip { border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+.reg-chip:hover { border-color: var(--teal); color: var(--teal); }
+.reg-chip.on { background: var(--teal); border-color: var(--teal); color: #fff; }
 .strip-card .card-head { margin-bottom: 6px; }
 @media (max-width: 640px) {
   .cal-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
