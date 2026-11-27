@@ -3,7 +3,9 @@
 // All charts use viewBox + width 100% so they scale without clipping,
 // and every annotation sits inside the viewBox with room to spare.
 
-import { HISTORY, CUSHION, ENVELOPES, fmt } from './data.js';
+import { HISTORY, CUSHION, ENVELOPES, INCOME, fmt } from './data.js';
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
@@ -43,7 +45,15 @@ export function allocationStrip(s) {
   }).join('');
   const marks = [50, 80].map((p) => { const mx = (p / 100) * W; return `<line x1="${mx}" y1="19" x2="${mx}" y2="47" stroke="#0F172A" stroke-width="2" stroke-dasharray="3 3"/><text x="${mx}" y="9" text-anchor="middle" font-size="10" fill="var(--muted)">${p === 50 ? '50% needs' : '80% · 20% save'}</text>`; }).join('');
   const legend = parts.map((p) => `<span class="strip-leg"><i style="background:${p.color}"></i>${esc(p.label)} <b>${fmt(p.value)}</b></span>`).join('');
-  return `<svg viewBox="0 0 ${W} 52" width="100%" height="52" role="img" aria-label="Income allocation">${marks}${segs}</svg><div class="strip-legend">${legend}</div>`;
+  // Reconciliation: the bar is shares of RECEIVED income ($6,720), but
+  // the plan is $7,420 — the $700 freelance due 28 Nov is still pending.
+  // The note makes the gap explicit so the bar never looks short.
+  const pending = s.expected - s.incomeReceived;
+  const pendSrc = INCOME[s.monthKey] ? INCOME[s.monthKey].sources.find((x) => x.pending) : null;
+  const recon = pending > 0 && pendSrc
+    ? `<div class="recon-line">Received <b>${fmt(s.incomeReceived)}</b> + Pending <b>${fmt(pending)}</b> (${esc(MONTHS_SHORT[Number(pendSrc.date.slice(5, 7)) - 1])} ${Number(pendSrc.date.slice(8, 10))} ${esc(pendSrc.name.split(' — ')[0])}) = <b>${fmt(s.expected)}</b> plan</div>`
+    : '';
+  return `<svg viewBox="0 0 ${W} 52" width="100%" height="52" role="img" aria-label="Income allocation">${marks}${segs}</svg><div class="strip-legend">${legend}</div>${recon}`;
 }
 
 // 30-day checking cushion curve (Nov, actual to the 20th, projected

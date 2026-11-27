@@ -109,7 +109,9 @@ main { max-width: 1240px; margin: 0 auto; padding: 12px 16px 20px; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
 .chip { font-size: 0.8rem; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; }
 .pace-list { margin-top: 6px; }
-.pace-row { display: grid; grid-template-columns: 128px 1fr 118px 56px; align-items: center; gap: 8px; padding: 2px 6px; border-radius: 8px; cursor: pointer; }
+.recon-line { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+.recon-line b { color: var(--ink); }
+.pace-row { display: grid; grid-template-columns: 128px 1fr 118px 56px; align-items: center; gap: 8px; padding: 0 6px; border-radius: 8px; cursor: pointer; }
 .pace-row:hover { background: var(--bg); }
 .pace-row.sel { background: var(--teal-soft); }
 .pace-name { font-size: 0.86rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -290,15 +292,37 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
    width on a phone — the grid-2/kpi-grid rule above exists for the same
    reason. */
 .sched-cols > * { min-width: 0; }
-.sched-cols h3 { margin: 4px 0 2px; }
+.sched-cols h3 { margin: 2px 0 2px; }
 
 /* V4: Reconciled Cash-Flow & Register Strip (variance tab bottom). Rows
    are single-line so the whole strip ends well above the 800px fold. */
 .strip-lines { margin: 6px 0 8px; line-height: 1.5; }
 /* The register column gets the wider share so a split row's full
    "Split: … · Balanced $0.00 ✓" fits on one line without ellipsis. */
-.strip-card .sched-cols { grid-template-columns: 0.85fr 1.15fr; }
+.strip-card .sched-cols { grid-template-columns: 1fr 1fr; }
 .strip-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+/* V6: bill-draft calendar tiles (Nov 25 – Dec 2). Five tiles in a row on
+   desktop; they wrap to three-across on phones. Every tile is one
+   min-width:0 grid child so nothing can push the strip wider than 390px. */
+.cal-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 2px 0 8px; }
+.cal-tile { min-width: 0; display: flex; flex-direction: column; gap: 1px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 0.78rem; line-height: 1.45; }
+.cal-tile b { font-size: 0.82rem; }
+.cal-tile span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-eod { font-weight: 700; }
+.floor-ok { color: var(--teal); font-style: normal; font-weight: 700; }
+.tile-pay { align-self: flex-start; margin-top: 3px; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+.tile-pay.paid { background: var(--teal-soft); color: var(--teal); border-color: var(--teal); }
+.strip-floor { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); }
+.split-check { margin: 2px 0 1px 54px; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--teal); border-radius: 6px; font-size: 0.8rem; line-height: 1.5; }
+/* V6: the strip must end at <= 785px, so its rows and actions are tighter
+   than the rest of the app — the register rows lose 3px of padding each
+   and the actions sit 4px closer to the split check. */
+.strip-card .reg-row { padding: 3px 0; }
+.strip-card .card-head { margin-bottom: 6px; }
+@media (max-width: 640px) {
+  .cal-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .split-check { margin-left: 0; }
+}
 .strip-chip { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
 .strip-chip.paid { background: var(--teal-soft); color: var(--teal); border-color: var(--teal); }
 .strip-link { margin: 4px 0 0; font-weight: 700; }
@@ -308,7 +332,7 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
 .reg-date { color: var(--muted); font-size: 0.8rem; width: 44px; flex: none; }
 .reg-payee { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reg-row .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.strip-actions { display: flex; gap: 8px; margin-top: 10px; }
+.strip-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 
 /* ---- Responsive ---- */
 @media (max-width: 1280px) {
@@ -368,6 +392,10 @@ button.cal-bill { border: 0; cursor: pointer; font: inherit; text-align: left; w
   .debt-card h3 { margin-bottom: 2px; }
   .curve-callout { margin-top: 2px; }
   .sched-cols { grid-template-columns: 1fr; }
+  /* V6: the strip's two-column rule is more specific than the generic
+     one above, so it must be restated here or the strip stays side by
+     side on phones (158px columns, unreadable register rows). */
+  .strip-card .sched-cols { grid-template-columns: 1fr; }
   .sched-cols h3 { margin: 2px 0 2px; }
   /* V5: four more mobile debt cuts so the schedule card's first row
      (Store Card · paid off mo 4) is inside the 844px frame. The schedule

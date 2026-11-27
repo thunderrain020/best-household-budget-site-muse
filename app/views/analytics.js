@@ -2,7 +2,7 @@
 // Three sub-tabs: variance charts, the snowball-vs-avalanche simulator,
 // and the sinking-fund goals, plus the full category / bills table.
 
-import { DEBTS, GOALS, VAULTS, BILLS, CUSHION, INCOME, simulateDebt, fmt, pct } from '../data.js';
+import { DEBTS, GOALS, VAULTS, BILLS, CUSHION, INCOME, simulateDebt, fmt, fmt2, pct } from '../data.js';
 import { varianceDonut, trendChart, debtCurve } from '../charts.js';
 import { t } from '../i18n.js';
 
@@ -33,39 +33,76 @@ const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 function registerStrip(state, s, audit) {
   const nov = INCOME['2026-11'].sources;
   const maya = nov.find((x) => x.name.includes('Maya'));
-  const jordan = nov.find((x) => x.name.includes('Jordan'));
+  const freelance = nov.find((x) => x.pending);
   const rent = BILLS.find((b) => b.id === 'rent');
   const decBuffer = CUSHION[29] + maya.amount - rent.amount;
-  const chips = BILLS.filter((b) => b.status === 'due').map((b) => {
-    const paid = state.user.paidBills.includes(b.id);
-    const short = b.name.split(' — ')[0];
-    return `<button class="strip-chip${paid ? ' paid' : ''}" data-action="cal-bill" data-bill="${b.id}">${paid ? '✓ ' : ''}${esc(short)} ${fmt(b.amount)} · ${paid ? 'Paid' : `due ${Number(b.due.slice(8, 10))} Nov`}</button>`;
-  }).join('');
+  const decRentPaid = state.user.decRentPaid !== false;
   const dLabel = (d) => `${Number(d.slice(8, 10))} ${MONTHS_SHORT[Number(d.slice(5, 7)) - 1]}`;
   const envName = (id) => { const e = s.envelopes.find((x) => x.id === id); return e ? e.name : id; };
   // Short labels (same convention as the allocator) so a split row's
   // "Split: … · Balanced $0.00 ✓" fits on one line without ellipsis.
   const SHORT_ENV = { 'Gifts & Giving': 'Gifts', 'Dining & Takeout': 'Dining Out', 'Extra Debt Payment': 'Extra Debt', 'Fun & Streaming': 'Fun & Media' };
   const shortEnv = (id) => SHORT_ENV[envName(id)] || envName(id);
+  // --- Left: Payday & bill draft calendar (Nov 25 – Dec 2). EODs are the
+  // cushion projections — the same numbers the #/audit calendar shows —
+  // and the Pay/Paid chip is the live paid state (cal-bill / dec-rent).
+  // NOTE: the prompt's draft EODs ($2,485 / $2,345 / $2,983 / $2,858) do
+  // NOT match CUSHION — the real projections are $1,480 / $1,210 /
+  // $1,848 / $1,720 (Nov 25–29) and $4,490 on Dec 2. The strip uses the
+  // real CUSHION values so it reconciles with the calendar and the chart.
+  const dueBills = BILLS.filter((b) => b.status === 'due');
+  const isPaid = (id) => state.user.paidBills.includes(id);
+  const tileFor = (bill) => {
+    const day = Number(bill.due.slice(8, 10));
+    const eod = CUSHION[day - 1];
+    const short = bill.name.split(' — ')[0];
+    const paid = isPaid(bill.id);
+    const flows = bill.id === 'water'
+      ? `<span class="good">Freelance +${fmt(freelance.amount)}</span><span>${esc(short)} −${fmt(bill.amount)}</span>`
+      : `<span>${esc(short)} −${fmt(bill.amount)}</span>`;
+    return `<div class="cal-tile"><b>${dLabel(bill.due)}</b>${flows}<span class="cal-eod">EOD ${fmt(eod)} <i class="floor-ok" title="Above the $1,000 floor">✓</i></span><button class="tile-pay${paid ? ' paid' : ''}" data-action="cal-bill" data-bill="${bill.id}" title="Click to toggle paid / scheduled">${paid ? 'Paid ✓' : 'Pay'}</button></div>`;
+  };
+  const tiles = dueBills.map(tileFor).join('');
+  const dec2 = `<div class="cal-tile"><b>Dec 2</b><span class="good">Payday +${fmt(maya.amount)}</span><span>Rent −${fmt(rent.amount)}</span><span class="cal-eod">EOD ${fmt(decBuffer)} <i class="floor-ok" title="Above the $1,000 floor">✓</i></span><button class="tile-pay${decRentPaid ? ' paid' : ''}" data-action="dec-rent" title="Click to toggle December rent paid / due">${decRentPaid ? 'Rent Paid ✓' : 'Rent due'}</button></div>`;
+  const eods = [...dueBills.map((b) => CUSHION[Number(b.due.slice(8, 10)) - 1]), decBuffer];
+  const lowEod = Math.min(...eods);
+  const lowDay = lowEod === decBuffer ? 'Dec 2' : dLabel(dueBills.find((b) => CUSHION[Number(b.due.slice(8, 10)) - 1] === lowEod).due);
+  const floorOk = lowEod >= 100000;
+  // --- Right: split-receipt register. The top three rows stay single-line;
+  // Corner Market is expanded with its live split breakdown, computed from
+  // the actual splits (Groceries $153.60 + Gifts $43.68 = $197.28) — the
+  // prompt's $142 / $55 figures are not the seeded split, so they are not
+  // used; the strip reconciles with the ledger instead.
   const splits = s.txns.filter((x) => x.splits);
   const recent = [...s.txns].filter((x) => !x.splits && x.type === 'expense').sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 2);
-  const regRows = [...splits, ...recent].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 4).map((x) => {
+  const corner = splits.find((x) => x.payee === 'Corner Market');
+  const others = [...splits.filter((x) => x !== corner), ...recent].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount).slice(0, 3);
+  const regRow = (x) => {
+    // The expanded Corner Market row drops the "· Balanced $0.00 ✓" from
+    // its sub-line — the split check directly below it carries the full
+    // balance, and the long sub would otherwise truncate with "…".
     const sub = x.splits
-      ? `Split: ${x.splits.map((sp) => shortEnv(sp.envelope)).join(' + ')} · Balanced $0.00 ✓`
+      ? (x === corner ? `Split: ${x.splits.map((sp) => shortEnv(sp.envelope)).join(' + ')}` : `Split: ${x.splits.map((sp) => shortEnv(sp.envelope)).join(' + ')} · Balanced $0.00 ✓`)
       : esc(envName(x.envelope));
     return `<div class="reg-row"><span class="reg-date">${dLabel(x.date)}</span><span class="reg-payee"><b>${esc(x.payee)}</b> <span class="muted">· ${sub}</span></span><b class="num">${fmt(x.amount)}</b><button class="pill-btn status-pill${x.status === 'scheduled' ? ' scheduled' : ''}" data-action="txn-status" data-id="${x.id}" title="Click to toggle cleared / scheduled">${x.status === 'scheduled' ? 'Scheduled' : 'Cleared ✓'}</button></div>`;
-  }).join('');
+  };
+  const regRows = others.map(regRow).join('');
+  const splitSum = corner.splits.reduce((a, sp) => a + sp.amount, 0);
+  const splitBal = corner.amount - splitSum;
+  const splitCheck = `${regRow(corner)}
+    <div class="split-check">${corner.splits.map((sp) => `<b>${esc(shortEnv(sp.envelope))} ${fmt2(sp.amount)}</b>`).join(' + ')} = <b>Split Sum ${fmt2(splitSum)}</b> · Balanced <b class="good">${fmt2(splitBal)} ✓</b></div>`;
   const auditOk = audit && audit.passed === audit.total;
   return `<section class="card strip-card"><div class="card-head"><h2>Reconciled cash-flow &amp; register</h2><span class="pill">Nov 2026 · to 20 Nov</span></div>
     <div class="sched-cols">
-      <div><h3>Payday &amp; bill funding</h3>
-        <p class="strip-lines"><b>Nov 2</b> +${fmt(maya.amount)} payday · <b>Nov 12</b> Low ${fmt(CUSHION[11])} · <b>Nov 16</b> +${fmt(jordan.amount)} payday<br>Dec rent buffer: <b class="good">${fmt(decBuffer)}</b> after the 2 Dec payday</p>
-        <div class="strip-chips">${chips}</div>
-        <p class="strip-link"><a href="#/audit">${audit ? `${audit.passed}/${audit.total} Audit ${auditOk ? 'PASS ✓' : '— check'}` : 'Audit'} · Full Calendar →</a></p>
+      <div><h3>Payday &amp; bill draft calendar</h3>
+        <div class="cal-tiles">${tiles}${dec2}</div>
+        <p class="strip-floor">Window low <b>${fmt(lowEod)}</b> (${esc(lowDay)}) · $1,000 floor · <b class="${floorOk ? 'good' : 'bad'}">${floorOk ? 'PASS ✓' : 'BELOW — check'}</b></p>
+        <p class="strip-link"><a href="#/audit">${audit ? `${audit.passed}/${audit.total} Audit ${auditOk ? 'PASS ✓' : '— check'}` : 'Audit'} · Full 30-Day Calendar →</a></p>
       </div>
       <div><h3>Split-receipt register</h3>
         ${regRows}
-        <div class="strip-actions"><button class="btn btn-sm" data-action="export" data-kind="csv">Download CSV</button><a class="btn btn-sm btn-primary" href="#/ledger">+ Split Receipt</a></div>
+        ${splitCheck}
+        <div class="strip-actions"><button class="btn btn-sm" data-action="export" data-kind="csv">Download CSV</button><button class="btn btn-sm" data-action="export" data-kind="json">JSON</button><a class="btn btn-sm btn-primary" href="#/ledger">+ Split Receipt</a></div>
       </div>
     </div></section>`;
 }

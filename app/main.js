@@ -235,6 +235,13 @@ document.addEventListener('click', (ev) => {
       }
       saveUser(); render();
     }
+  } else if (action === 'dec-rent') {
+    // December rent tile on the variance strip: toggle whether the 2 Dec
+    // rent is paid. The projection assumes it is paid (EOD $4,490); the
+    // chip just records the state, like the calendar's Pay/Paid chips.
+    const wasPaid = state.user.decRentPaid !== false;
+    state.user.decRentPaid = !wasPaid;
+    saveUser(); render();
   } else if (action === 'txn-status') {
     const txn = s.txns.find((x) => x.id === el.dataset.id);
     if (txn && txn.type !== 'income') {
